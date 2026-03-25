@@ -1,0 +1,17 @@
+id: form-fill-naver-search
+name: Naver Search Query
+category: form-fill
+url: "https://www.naver.com"
+goal: |
+  Go to Naver and search for "인공지능 최신 뉴스" (latest AI news).
+  Wait for search results to load and verify that results are displayed.
+maxSteps: 15
+timeoutMs: 90000
+observationRuns: 3
+mode: auto
+
+expectedOutcome:
+  expectedUrl: ".*search.*"
+  expectedContent:
+    - "인공지능"
+  optimalSteps: 4

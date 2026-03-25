@@ -1,0 +1,20 @@
+id: info-lookup-wikipedia
+name: Wikipedia Fact Lookup
+category: info-lookup
+url: "https://en.wikipedia.org"
+goal: |
+  Search Wikipedia for "Turing Award" and find who won the award in 2023.
+  Report the winner's name.
+maxSteps: 20
+timeoutMs: 120000
+observationRuns: 3
+mode: auto
+
+expectedOutcome:
+  expectedContent:
+    - "Bob Metcalfe"
+  assertions:
+    - selector: "#firstHeading"
+      check: text
+      contains: "Turing Award"
+  optimalSteps: 6

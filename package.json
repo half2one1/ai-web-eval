@@ -1,0 +1,23 @@
+{
+  "name": "ai-web-eval",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "ai-web-eval": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openai": "^4.80.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}

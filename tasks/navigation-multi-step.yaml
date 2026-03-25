@@ -1,0 +1,15 @@
+id: navigation-github-repo
+name: GitHub Repository Navigation
+category: navigation
+url: "https://github.com"
+goal: |
+  Navigate to GitHub, search for "anthropics/claude-code", and find the repository.
+  Open the repository page and report the description shown on the repo page.
+maxSteps: 25
+timeoutMs: 120000
+observationRuns: 3
+mode: auto
+
+expectedOutcome:
+  expectedUrl: ".*github.com/anthropics/claude-code.*"
+  optimalSteps: 6
