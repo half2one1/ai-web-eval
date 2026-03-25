@@ -71,6 +71,9 @@ export async function runAgent(
   let retries = 0;
   const maxRetries = 2;
   const startTime = Date.now();
+  let lastActionKey = "";
+  let repeatCount = 0;
+  const MAX_REPEATS = 2; // detect loops after 2 identical actions in a row
 
   log.info(`Agent started: task=${task.id}, mode=${adapter.mode}, session=${sessionId}`);
 
@@ -134,20 +137,24 @@ export async function runAgent(
             durationMs,
           });
 
-          messages.push(...adapter.toResultMessages(action, result));
+          let enrichedResult = result;
+          if (isSignificantAction(action.name)) {
+            const snapshot = await executor.execute("snapshot", { interactive_only: true }, sessionId);
+            if (snapshot.success) {
+              enrichedResult = {
+                ...result,
+                output: result.output + "\n\n[Page interactive elements after action]:\n" + snapshot.output,
+              };
+              trace.actions[trace.actions.length - 1].snapshotAfter = snapshot.output;
+            }
+          }
+
+          messages.push(...adapter.toResultMessages(action, enrichedResult));
           trace.modelMessages.push({
             role: "user",
-            content: result.success ? result.output : `Error: ${result.error}`,
+            content: enrichedResult.success ? enrichedResult.output : `Error: ${enrichedResult.error}`,
             timestamp: new Date().toISOString(),
           });
-        }
-
-        if (reparsed.actions.some((a) => isSignificantAction(a.name))) {
-          const snapshot = await executor.execute("snapshot", { interactive_only: true }, sessionId);
-          if (snapshot.success) {
-            messages.push(...adapter.toContextMessages(snapshot));
-            trace.actions[trace.actions.length - 1].snapshotAfter = snapshot.output;
-          }
         }
         continue;
       }
@@ -202,22 +209,44 @@ export async function runAgent(
         durationMs,
       });
 
-      messages.push(...adapter.toResultMessages(action, result));
-      trace.modelMessages.push({
-        role: "user",
-        content: result.success ? result.output : `Error: ${result.error}`,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    // Auto-snapshot after significant actions
-    if (parsed.actions.some((a) => isSignificantAction(a.name))) {
-      const snapshot = await executor.execute("snapshot", { interactive_only: true }, sessionId);
-      if (snapshot.success) {
-        messages.push(...adapter.toContextMessages(snapshot));
-        if (trace.actions.length > 0) {
+      // Auto-snapshot after significant actions: append to the tool result
+      // so the model sees the page state immediately in the same response
+      let enrichedResult = result;
+      if (isSignificantAction(action.name)) {
+        const snapshot = await executor.execute("snapshot", { interactive_only: true }, sessionId);
+        if (snapshot.success) {
+          enrichedResult = {
+            ...result,
+            output: result.output + "\n\n[Page interactive elements after action]:\n" + snapshot.output,
+          };
           trace.actions[trace.actions.length - 1].snapshotAfter = snapshot.output;
         }
+      }
+
+      messages.push(...adapter.toResultMessages(action, enrichedResult));
+      trace.modelMessages.push({
+        role: "user",
+        content: enrichedResult.success ? enrichedResult.output : `Error: ${enrichedResult.error}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Loop detection: if the model repeats the same action, inject correction
+      const compareArgs = { ...action.args };
+      delete compareArgs._toolCallId;
+      const actionKey = `${action.name}:${JSON.stringify(compareArgs)}`;
+      if (actionKey === lastActionKey) {
+        repeatCount++;
+        if (repeatCount >= MAX_REPEATS) {
+          log.warn(`Loop detected: '${action.name}' repeated ${repeatCount + 1} times`);
+          messages.push({
+            role: "user",
+            content: `WARNING: You have repeated the same action '${action.name}' ${repeatCount + 1} times. This is not making progress. Look at the page elements listed above and choose a DIFFERENT action. For example, use browser_fill to type in the search box, or browser_click to click a button.`,
+          });
+          repeatCount = 0;
+        }
+      } else {
+        lastActionKey = actionKey;
+        repeatCount = 0;
       }
     }
   }
