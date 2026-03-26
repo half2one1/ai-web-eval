@@ -3,29 +3,45 @@ import type { FailurePattern } from "../types/pattern.js";
 
 /**
  * Cluster similar failures across multiple traces of the same task.
- * Groups failures by:
- * 1. Step position (early, mid, late)
- * 2. Action type
- * 3. Error similarity
+ * Analyzes both individual action annotations AND trace-level strategic patterns.
  */
 export function clusterFailures(traces: ActionTrace[]): FailurePattern[] {
   if (traces.length === 0) return [];
 
+  const patterns: FailurePattern[] = [];
+
+  // 1. Cluster individual action failures
+  patterns.push(...clusterActionFailures(traces));
+
+  // 2. Detect trace-level strategic patterns
+  patterns.push(...detectStrategicPatterns(traces));
+
+  return patterns.sort((a, b) => b.frequency - a.frequency);
+}
+
+/**
+ * Cluster individual action annotations (mistake, redundant, suboptimal)
+ * across runs.
+ */
+function clusterActionFailures(traces: ActionTrace[]): FailurePattern[] {
   const clusters = new Map<string, FailureCluster>();
+  const totalTraces = traces.length;
 
   for (let traceIdx = 0; traceIdx < traces.length; traceIdx++) {
     const trace = traces[traceIdx];
 
     for (const action of trace.actions) {
       if (!action.annotation) continue;
-      if (action.annotation.type !== "mistake" && action.annotation.type !== "suboptimal") continue;
+      const t = action.annotation.type;
+      // Include mistake, redundant, AND suboptimal
+      if (t !== "mistake" && t !== "suboptimal" && t !== "redundant") continue;
 
-      const key = buildClusterKey(action.action, action.annotation.type, action.index);
+      const key = buildClusterKey(action.action, t, action.index);
       let cluster = clusters.get(key);
       if (!cluster) {
         cluster = {
           actionType: action.action,
-          annotationType: action.annotation.type,
+          annotationType: t,
           steps: [],
           examples: [],
           traceIndices: new Set(),
@@ -45,13 +61,9 @@ export function clusterFailures(traces: ActionTrace[]): FailurePattern[] {
     }
   }
 
-  // Convert clusters to FailurePatterns
-  const totalTraces = traces.length;
   const patterns: FailurePattern[] = [];
-
   for (const cluster of clusters.values()) {
     const frequency = cluster.traceIndices.size / totalTraces;
-    // Only include patterns that recur across multiple runs (or in all runs if few)
     if (frequency < 0.3 && totalTraces > 2) continue;
 
     patterns.push({
@@ -62,7 +74,107 @@ export function clusterFailures(traces: ActionTrace[]): FailurePattern[] {
     });
   }
 
-  return patterns.sort((a, b) => b.frequency - a.frequency);
+  return patterns;
+}
+
+/**
+ * Detect higher-level strategic failure patterns across traces:
+ * - Action loops (same action repeated N times)
+ * - No interactive actions used
+ * - Never progressed past the first page
+ * - Task goal keywords never appeared in any action args
+ */
+function detectStrategicPatterns(traces: ActionTrace[]): FailurePattern[] {
+  const patterns: FailurePattern[] = [];
+  const totalTraces = traces.length;
+
+  // Pattern: action loops (model stuck repeating same action)
+  let loopTraceCount = 0;
+  const loopExamples: FailurePattern["examples"] = [];
+
+  for (let i = 0; i < traces.length; i++) {
+    const trace = traces[i];
+    const loopActions = trace.actions.filter(
+      (a) =>
+        a.annotation?.type === "mistake" &&
+        a.annotation.message.includes("Stuck in loop"),
+    );
+    if (loopActions.length > 0) {
+      loopTraceCount++;
+      loopExamples.push({
+        runIndex: i,
+        actionIndex: loopActions[0].index,
+        action: loopActions[0].action,
+        args: loopActions[0].args,
+        error: `Repeated ${loopActions.length + 1}+ times`,
+      });
+    }
+  }
+
+  if (loopTraceCount > 0) {
+    const dominantAction = loopExamples[0]?.action || "unknown";
+    patterns.push({
+      description: `Model gets stuck in a loop repeating '${dominantAction}' without making progress toward the task goal`,
+      frequency: loopTraceCount / totalTraces,
+      atSteps: loopExamples.map((e) => e.actionIndex),
+      examples: loopExamples,
+    });
+  }
+
+  // Pattern: no interactive actions (fill, click, type, select)
+  let noInteractionCount = 0;
+  for (let i = 0; i < traces.length; i++) {
+    const trace = traces[i];
+    const interactive = ["fill", "click", "type", "select", "press"];
+    const hasInteraction = trace.actions.some((a) => interactive.includes(a.action));
+    if (!hasInteraction && trace.actions.length >= 3) {
+      noInteractionCount++;
+    }
+  }
+
+  if (noInteractionCount > 0) {
+    patterns.push({
+      description: `Model never used any interactive action (fill, click, type) — failed to engage with page elements`,
+      frequency: noInteractionCount / totalTraces,
+      atSteps: [0],
+      examples: [],
+    });
+  }
+
+  // Pattern: low action diversity
+  let lowDiversityCount = 0;
+  for (const trace of traces) {
+    const uniqueActions = new Set(trace.actions.map((a) => a.action));
+    if (uniqueActions.size <= 2 && trace.actions.length >= 5) {
+      lowDiversityCount++;
+    }
+  }
+
+  if (lowDiversityCount > 0) {
+    patterns.push({
+      description: `Model uses very few distinct action types (<=2) across many steps — lacks strategic variety`,
+      frequency: lowDiversityCount / totalTraces,
+      atSteps: [0],
+      examples: [],
+    });
+  }
+
+  // Pattern: task not completed
+  let notCompletedCount = 0;
+  for (const trace of traces) {
+    if (!trace.completed) notCompletedCount++;
+  }
+
+  if (notCompletedCount > 0 && notCompletedCount === totalTraces) {
+    patterns.push({
+      description: `Model never signaled task completion (never called task_complete/done) — ran out of steps every time`,
+      frequency: 1.0,
+      atSteps: [],
+      examples: [],
+    });
+  }
+
+  return patterns;
 }
 
 interface FailureCluster {
@@ -74,7 +186,6 @@ interface FailureCluster {
 }
 
 function buildClusterKey(action: string, type: string, step: number): string {
-  // Group steps into bins: early (0-3), mid (4-9), late (10+)
   const phase = step < 4 ? "early" : step < 10 ? "mid" : "late";
   return `${type}:${action}:${phase}`;
 }
@@ -92,6 +203,10 @@ function describeCluster(cluster: FailureCluster): string {
       .slice(0, 3);
     const errorSummary = errors.length > 0 ? `: ${errors[0]}` : "";
     return `Model frequently fails at '${actionType}' around step ${avgStep}${errorSummary}`;
+  }
+
+  if (annotationType === "redundant") {
+    return `Model redundantly repeats '${actionType}' around step ${avgStep} without state change`;
   }
 
   if (annotationType === "suboptimal") {

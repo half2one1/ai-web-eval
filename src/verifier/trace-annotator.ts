@@ -2,7 +2,7 @@ import type { ActionTrace, TracedAction, ActionAnnotation } from "../types/trace
 
 /**
  * Annotate each action in a trace with labels:
- * - mistake: action failed or was immediately corrected
+ * - mistake: action failed, or part of a detected loop (strategic failure)
  * - redundant: repeated action with no meaningful state change
  * - recovery: corrective action after a mistake
  * - optimal: action that directly progresses toward the goal
@@ -12,17 +12,65 @@ export function annotateTrace(trace: ActionTrace): ActionAnnotation[] {
   const annotations: ActionAnnotation[] = [];
   const actions = trace.actions;
 
+  // Pre-compute loop spans: find runs of identical consecutive actions
+  const loopSpans = detectLoops(actions);
+
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
     const prev = i > 0 ? actions[i - 1] : null;
     const next = i < actions.length - 1 ? actions[i + 1] : null;
 
-    const annotation = classifyAction(action, prev, next, i);
+    // Check if this action is inside a detected loop
+    const inLoop = loopSpans.some(
+      (span) => i >= span.start && i <= span.end,
+    );
+
+    const annotation = classifyAction(action, prev, next, i, inLoop);
     annotations.push(annotation);
     action.annotation = annotation;
   }
 
+  // Post-pass: detect strategic failures at the trace level
+  addStrategicAnnotations(trace, annotations);
+
   return annotations;
+}
+
+interface LoopSpan {
+  start: number;
+  end: number;
+  action: string;
+  count: number;
+}
+
+/**
+ * Detect consecutive runs of the same action (ignoring _toolCallId).
+ * A "loop" is 3+ consecutive identical actions.
+ */
+function detectLoops(actions: TracedAction[]): LoopSpan[] {
+  const spans: LoopSpan[] = [];
+  let runStart = 0;
+
+  for (let i = 1; i <= actions.length; i++) {
+    const curr = i < actions.length ? actions[i] : null;
+    const prev = actions[i - 1];
+
+    if (curr && isSameAction(curr, prev)) continue;
+
+    // End of a run
+    const runLen = i - runStart;
+    if (runLen >= 3) {
+      spans.push({
+        start: runStart,
+        end: i - 1,
+        action: actions[runStart].action,
+        count: runLen,
+      });
+    }
+    runStart = i;
+  }
+
+  return spans;
 }
 
 function classifyAction(
@@ -30,6 +78,7 @@ function classifyAction(
   prev: TracedAction | null,
   next: TracedAction | null,
   _index: number,
+  inLoop: boolean,
 ): ActionAnnotation {
   // Failed actions are mistakes
   if (!action.result.success) {
@@ -39,7 +88,15 @@ function classifyAction(
     };
   }
 
-  // Redundant: same action + args as the previous action
+  // Loop: repeated action 3+ times in a row is a strategic mistake
+  if (inLoop && prev && isSameAction(action, prev)) {
+    return {
+      type: "mistake",
+      message: `Stuck in loop: repeated '${action.action}' without progressing toward the goal`,
+    };
+  }
+
+  // Redundant: same action + args as the previous action (not in a 3+ loop)
   if (prev && isSameAction(action, prev)) {
     return {
       type: "redundant",
@@ -77,7 +134,6 @@ function classifyAction(
     prev?.action === "click" &&
     next?.action === "snapshot"
   ) {
-    // Heuristic: if the model clicks then immediately navigates to a different URL, it's recovery
     return {
       type: "recovery",
       message: "Navigated back after click — possible wrong navigation recovery",
@@ -99,9 +155,55 @@ function classifyAction(
   };
 }
 
+/**
+ * Detect trace-level strategic failures that individual action classification misses.
+ * These become additional annotations on the first action of the trace.
+ */
+function addStrategicAnnotations(
+  trace: ActionTrace,
+  annotations: ActionAnnotation[],
+): void {
+  if (trace.actions.length === 0) return;
+
+  const actionTypes = new Set(trace.actions.map((a) => a.action));
+  const totalActions = trace.actions.length;
+
+  // Strategic failure: model never used fill, click, or type (no interaction)
+  const interactiveActions = ["fill", "click", "type", "select", "press"];
+  const usedAnyInteractive = interactiveActions.some((a) => actionTypes.has(a));
+
+  if (!usedAnyInteractive && totalActions >= 3) {
+    // Find the first "optimal" annotation and upgrade it to "suboptimal"
+    for (let i = 0; i < annotations.length; i++) {
+      if (annotations[i].type === "optimal") {
+        annotations[i] = {
+          type: "suboptimal",
+          message: `Model never used any interactive action (fill, click, type) across ${totalActions} steps — failed to engage with the page`,
+        };
+        if (trace.actions[i]) trace.actions[i].annotation = annotations[i];
+        break;
+      }
+    }
+  }
+
+  // Strategic failure: action diversity is very low
+  if (actionTypes.size <= 2 && totalActions >= 5) {
+    const dominant = [...actionTypes].join(", ");
+    for (let i = 0; i < annotations.length; i++) {
+      if (annotations[i].type === "optimal") {
+        annotations[i] = {
+          type: "suboptimal",
+          message: `Very low action diversity: only used [${dominant}] across ${totalActions} steps`,
+        };
+        if (trace.actions[i]) trace.actions[i].annotation = annotations[i];
+        break;
+      }
+    }
+  }
+}
+
 function isSameAction(a: TracedAction, b: TracedAction): boolean {
   if (a.action !== b.action) return false;
-  // Compare args (ignoring _toolCallId)
   const aArgs = { ...a.args };
   const bArgs = { ...b.args };
   delete aArgs._toolCallId;

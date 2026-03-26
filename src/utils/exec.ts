@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
 
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, "");
+}
+
 export interface ExecResult {
   success: boolean;
   stdout: string;
@@ -20,8 +27,8 @@ export async function execCommand(
       (error, stdout, stderr) => {
         resolve({
           success: !error,
-          stdout: stdout.toString(),
-          stderr: stderr.toString(),
+          stdout: stripAnsi(stdout.toString()),
+          stderr: stripAnsi(stderr.toString()),
           exitCode: proc.exitCode,
         });
       },

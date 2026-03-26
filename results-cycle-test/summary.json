@@ -1,0 +1,26 @@
+[
+  {
+    "cycle": 1,
+    "tasks": [
+      {
+        "taskId": "form-fill-naver-search",
+        "passRate": 0,
+        "failurePatterns": 8,
+        "successPatterns": 0,
+        "feedbackLength": 1162
+      }
+    ]
+  },
+  {
+    "cycle": 2,
+    "tasks": [
+      {
+        "taskId": "form-fill-naver-search",
+        "passRate": 0,
+        "failurePatterns": 8,
+        "successPatterns": 0,
+        "feedbackLength": 1162
+      }
+    ]
+  }
+]
