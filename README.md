@@ -73,7 +73,7 @@ npm install -g agent-browser
 ## Installation
 
 ```bash
-git clone https://github.com/myhomemacminiagent/ai-web-eval.git
+git clone https://github.com/half2one1/ai-web-eval.git
 cd ai-web-eval
 npm install
 npm run build
