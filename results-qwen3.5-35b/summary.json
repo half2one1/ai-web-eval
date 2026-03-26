@@ -1,0 +1,54 @@
+[
+  {
+    "cycle": 1,
+    "tasks": [
+      {
+        "taskId": "form-fill-naver-search",
+        "passRate": 0,
+        "failurePatterns": 0,
+        "successPatterns": 0,
+        "feedbackLength": 407
+      },
+      {
+        "taskId": "info-lookup-wikipedia",
+        "passRate": 0,
+        "failurePatterns": 3,
+        "successPatterns": 0,
+        "feedbackLength": 638
+      },
+      {
+        "taskId": "navigation-github-repo",
+        "passRate": 0.6666666666666666,
+        "failurePatterns": 1,
+        "successPatterns": 2,
+        "feedbackLength": 613
+      }
+    ]
+  },
+  {
+    "cycle": 2,
+    "tasks": [
+      {
+        "taskId": "form-fill-naver-search",
+        "passRate": 0,
+        "failurePatterns": 1,
+        "successPatterns": 0,
+        "feedbackLength": 924
+      },
+      {
+        "taskId": "info-lookup-wikipedia",
+        "passRate": 0,
+        "failurePatterns": 0,
+        "successPatterns": 0,
+        "feedbackLength": 1046
+      },
+      {
+        "taskId": "navigation-github-repo",
+        "passRate": 1,
+        "failurePatterns": 1,
+        "successPatterns": 2,
+        "feedbackLength": 613
+      }
+    ]
+  }
+]
