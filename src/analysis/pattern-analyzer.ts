@@ -36,11 +36,31 @@ export function analyzePatterns(report: ObservationReport): AnalysisResult {
       .map((p) => p.description),
   };
 
-  // Add score-based insights when all runs fail
+  // Add specific score-based insights when all runs fail
   if (passRate === 0 && generalizedReasons.failures.length === 0) {
-    generalizedReasons.failures.push(
-      `All ${totalRuns} runs failed to complete the task. The model may not be capable enough for this task type.`,
-    );
+    // Analyze WHY runs failed instead of generic message
+    const completedButFailed = runs.filter((r) => r.trace.completed && !r.score.passed);
+    const neverCompleted = runs.filter((r) => !r.trace.completed);
+    const avgScore = runs.reduce((s, r) => s + r.score.overall, 0) / totalRuns;
+
+    if (completedButFailed.length > 0) {
+      const details = completedButFailed[0].score.completion.details
+        .filter((d: string) => d.includes("missing") || d.includes("mismatch") || d.includes("failed"))
+        .join("; ");
+      generalizedReasons.failures.push(
+        `Model called task_complete in ${completedButFailed.length}/${totalRuns} runs but verification failed: ${details || "page state didn't match expected outcome"}`,
+      );
+    } else if (neverCompleted.length === totalRuns) {
+      if (avgScore >= 0.7) {
+        generalizedReasons.failures.push(
+          `Model performed well (avg score ${avgScore.toFixed(2)}) but never called task_complete — it ran out of steps every time. Call task_complete as soon as the goal is achieved.`,
+        );
+      } else {
+        generalizedReasons.failures.push(
+          `All ${totalRuns} runs failed: model didn't complete the task or reach the expected outcome. Avg score: ${avgScore.toFixed(2)}.`,
+        );
+      }
+    }
   }
 
   log.info(`Patterns found: ${failurePatterns.length} failure, ${successPatterns.length} success, ${criticalSteps.length} critical steps`);

@@ -1,0 +1,200 @@
+{
+  "observation": {
+    "taskId": "info-lookup-wikipedia",
+    "timestamp": "2026-03-26T12:53:14.630Z",
+    "runs": [
+      {
+        "runIndex": 0,
+        "sessionId": "obs-info-lookup-wikipedia-mn7h1owh-4",
+        "trace": {
+          "taskId": "info-lookup-wikipedia",
+          "sessionId": "obs-info-lookup-wikipedia-mn7h1owh-4",
+          "startedAt": "2026-03-26T12:51:40.188Z",
+          "completedAt": "2026-03-26T12:51:41.404Z",
+          "completed": false,
+          "completionSummary": null,
+          "actions": [],
+          "thoughts": [],
+          "modelMessages": [
+            {
+              "role": "system",
+              "content": "You are a web browsing agent. Your job is to accomplish the given task by interacting with a real web browser.\n\nYou can see the page through accessibility tree snapshots that show interactive elements with @ref identifiers (e.g., @e1, @e2). Use these refs to click, fill, and interact with elements.\n\nStrategy:\n1. Always start by taking a snapshot to see the current page state\n2. Identify the elements you need to interact with\n3. Perform actions one at a time\n4. After significant actions (clicks, form fills), take another snapshot to verify the result\n5. When the task is complete, signal completion\n\nBe efficient — avoid unnecessary actions. If something fails, try an alternative approach rather than repeating the same action.\n\nUse the provided tool functions to interact with the browser. Call one tool at a time, observe the result, then decide your next action. When the task is complete, call the task_complete tool.",
+              "timestamp": "2026-03-26T12:51:40.188Z"
+            },
+            {
+              "role": "user",
+              "content": "TASK: Search Wikipedia for \"Turing Award\" and find who won the award in 2023.\nReport the winner's name.\n\n\nStarting URL: https://en.wikipedia.org\nMaximum steps allowed: 20\n\nBegin by navigating to the starting URL and taking a snapshot to see the page.",
+              "timestamp": "2026-03-26T12:51:40.188Z"
+            }
+          ]
+        },
+        "score": {
+          "taskId": "info-lookup-wikipedia",
+          "sessionId": "obs-info-lookup-wikipedia-mn7h1owh-4",
+          "runIndex": 0,
+          "passed": false,
+          "overall": 0.5,
+          "completion": {
+            "score": 0,
+            "assertionsPassed": 0,
+            "assertionsTotal": 1,
+            "details": [
+              "Content check: used snapshot fallback (get text failed)",
+              "Content missing: Bob Metcalfe",
+              "Text check failed: expected to contain 'Turing Award', got 'undefined'"
+            ]
+          },
+          "efficiency": {
+            "score": 1,
+            "actualSteps": 0,
+            "optimalSteps": 6,
+            "redundantActions": 0,
+            "recoveryActions": 0
+          },
+          "accuracy": {
+            "score": 1,
+            "correctActions": 0,
+            "totalActions": 0,
+            "mistakeCount": 0
+          },
+          "mistakes": []
+        }
+      },
+      {
+        "runIndex": 1,
+        "sessionId": "obs-info-lookup-wikipedia-mn7h2aam-5",
+        "trace": {
+          "taskId": "info-lookup-wikipedia",
+          "sessionId": "obs-info-lookup-wikipedia-mn7h2aam-5",
+          "startedAt": "2026-03-26T12:52:07.876Z",
+          "completedAt": "2026-03-26T12:52:19.617Z",
+          "completed": false,
+          "completionSummary": null,
+          "actions": [],
+          "thoughts": [],
+          "modelMessages": [
+            {
+              "role": "system",
+              "content": "You are a web browsing agent. Your job is to accomplish the given task by interacting with a real web browser.\n\nYou can see the page through accessibility tree snapshots that show interactive elements with @ref identifiers (e.g., @e1, @e2). Use these refs to click, fill, and interact with elements.\n\nStrategy:\n1. Always start by taking a snapshot to see the current page state\n2. Identify the elements you need to interact with\n3. Perform actions one at a time\n4. After significant actions (clicks, form fills), take another snapshot to verify the result\n5. When the task is complete, signal completion\n\nBe efficient — avoid unnecessary actions. If something fails, try an alternative approach rather than repeating the same action.\n\nUse the provided tool functions to interact with the browser. Call one tool at a time, observe the result, then decide your next action. When the task is complete, call the task_complete tool.",
+              "timestamp": "2026-03-26T12:52:07.876Z"
+            },
+            {
+              "role": "user",
+              "content": "TASK: Search Wikipedia for \"Turing Award\" and find who won the award in 2023.\nReport the winner's name.\n\n\nStarting URL: https://en.wikipedia.org\nMaximum steps allowed: 20\n\nBegin by navigating to the starting URL and taking a snapshot to see the page.",
+              "timestamp": "2026-03-26T12:52:07.876Z"
+            }
+          ]
+        },
+        "score": {
+          "taskId": "info-lookup-wikipedia",
+          "sessionId": "obs-info-lookup-wikipedia-mn7h2aam-5",
+          "runIndex": 1,
+          "passed": false,
+          "overall": 0.5,
+          "completion": {
+            "score": 0,
+            "assertionsPassed": 0,
+            "assertionsTotal": 1,
+            "details": [
+              "Content check: used snapshot fallback (get text failed)",
+              "Content missing: Bob Metcalfe",
+              "Text check failed: expected to contain 'Turing Award', got 'undefined'"
+            ]
+          },
+          "efficiency": {
+            "score": 1,
+            "actualSteps": 0,
+            "optimalSteps": 6,
+            "redundantActions": 0,
+            "recoveryActions": 0
+          },
+          "accuracy": {
+            "score": 1,
+            "correctActions": 0,
+            "totalActions": 0,
+            "mistakeCount": 0
+          },
+          "mistakes": []
+        }
+      },
+      {
+        "runIndex": 2,
+        "sessionId": "obs-info-lookup-wikipedia-mn7h33ry-6",
+        "trace": {
+          "taskId": "info-lookup-wikipedia",
+          "sessionId": "obs-info-lookup-wikipedia-mn7h33ry-6",
+          "startedAt": "2026-03-26T12:52:46.135Z",
+          "completedAt": "2026-03-26T12:52:48.853Z",
+          "completed": false,
+          "completionSummary": null,
+          "actions": [],
+          "thoughts": [],
+          "modelMessages": [
+            {
+              "role": "system",
+              "content": "You are a web browsing agent. Your job is to accomplish the given task by interacting with a real web browser.\n\nYou can see the page through accessibility tree snapshots that show interactive elements with @ref identifiers (e.g., @e1, @e2). Use these refs to click, fill, and interact with elements.\n\nStrategy:\n1. Always start by taking a snapshot to see the current page state\n2. Identify the elements you need to interact with\n3. Perform actions one at a time\n4. After significant actions (clicks, form fills), take another snapshot to verify the result\n5. When the task is complete, signal completion\n\nBe efficient — avoid unnecessary actions. If something fails, try an alternative approach rather than repeating the same action.\n\nUse the provided tool functions to interact with the browser. Call one tool at a time, observe the result, then decide your next action. When the task is complete, call the task_complete tool.",
+              "timestamp": "2026-03-26T12:52:46.135Z"
+            },
+            {
+              "role": "user",
+              "content": "TASK: Search Wikipedia for \"Turing Award\" and find who won the award in 2023.\nReport the winner's name.\n\n\nStarting URL: https://en.wikipedia.org\nMaximum steps allowed: 20\n\nBegin by navigating to the starting URL and taking a snapshot to see the page.",
+              "timestamp": "2026-03-26T12:52:46.135Z"
+            }
+          ]
+        },
+        "score": {
+          "taskId": "info-lookup-wikipedia",
+          "sessionId": "obs-info-lookup-wikipedia-mn7h33ry-6",
+          "runIndex": 2,
+          "passed": false,
+          "overall": 0.5,
+          "completion": {
+            "score": 0,
+            "assertionsPassed": 0,
+            "assertionsTotal": 1,
+            "details": [
+              "Content check: used snapshot fallback (get text failed)",
+              "Content missing: Bob Metcalfe",
+              "Text check failed: expected to contain 'Turing Award', got 'undefined'"
+            ]
+          },
+          "efficiency": {
+            "score": 1,
+            "actualSteps": 0,
+            "optimalSteps": 6,
+            "redundantActions": 0,
+            "recoveryActions": 0
+          },
+          "accuracy": {
+            "score": 1,
+            "correctActions": 0,
+            "totalActions": 0,
+            "mistakeCount": 0
+          },
+          "mistakes": []
+        }
+      }
+    ]
+  },
+  "analysis": {
+    "taskId": "info-lookup-wikipedia",
+    "totalRuns": 3,
+    "passRate": 0,
+    "failurePatterns": [
+      {
+        "description": "Model never signaled task completion (never called task_complete/done) — ran out of steps every time",
+        "frequency": 1,
+        "atSteps": [],
+        "examples": []
+      }
+    ],
+    "successPatterns": [],
+    "criticalSteps": [],
+    "generalizedReasons": {
+      "failures": [
+        "Model never signaled task completion (never called task_complete/done) — ran out of steps every time"
+      ],
+      "successes": []
+    }
+  }
+}

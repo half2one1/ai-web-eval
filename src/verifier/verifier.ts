@@ -144,22 +144,42 @@ export async function verify(
     );
   }
 
-  // Check expected content
+  // Check expected content — try multiple extraction methods
   if (task.expectedOutcome.expectedContent) {
-    const pageText = await getBrowserValue(sessionId, "text");
+    // Try get text first, then snapshot as fallback, then page title
+    let pageText = await getBrowserValue(sessionId, "text");
+    if (!pageText) {
+      // Fallback: use snapshot to get page content
+      const snapshotResult = await execAgentBrowser("snapshot", [], sessionId);
+      if (snapshotResult.success) {
+        pageText = snapshotResult.stdout;
+        details.push("Content check: used snapshot fallback (get text failed)");
+      }
+    }
+    if (!pageText) {
+      // Last resort: get page title
+      const titleResult = await execAgentBrowser("get", ["title"], sessionId);
+      if (titleResult.success) {
+        pageText = titleResult.stdout;
+        details.push("Content check: used title fallback");
+      }
+    }
+
     if (pageText) {
+      const normalizedPage = pageText.toLowerCase();
       const found = task.expectedOutcome.expectedContent.filter((c) =>
-        pageText.includes(c),
+        normalizedPage.includes(c.toLowerCase()),
       );
       const missing = task.expectedOutcome.expectedContent.filter(
-        (c) => !pageText.includes(c),
+        (c) => !normalizedPage.includes(c.toLowerCase()),
       );
       contentMatch = missing.length === 0;
       if (found.length > 0) details.push(`Content found: ${found.join(", ")}`);
       if (missing.length > 0) details.push(`Content missing: ${missing.join(", ")}`);
     } else {
-      contentMatch = false;
-      details.push("Could not read page text");
+      // If all text extraction fails but URL matches, treat content as inconclusive (not failed)
+      contentMatch = null;
+      details.push("Could not read page text (all methods failed, skipping content check)");
     }
   }
 

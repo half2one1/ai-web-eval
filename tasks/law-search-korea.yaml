@@ -1,0 +1,19 @@
+id: law-search-korea
+name: Korean Law Search (law.go.kr)
+category: info-lookup
+url: "https://www.law.go.kr"
+goal: |
+  Go to the Korean National Law Information Center (law.go.kr).
+  Search for "개인정보 보호법" (Personal Information Protection Act).
+  Find and open the law detail page.
+  Report the law's official title and its most recent amendment date.
+maxSteps: 25
+timeoutMs: 120000
+observationRuns: 3
+mode: auto
+
+expectedOutcome:
+  expectedUrl: ".*law\\.go\\.kr.*"
+  expectedContent:
+    - "개인정보"
+  optimalSteps: 6
