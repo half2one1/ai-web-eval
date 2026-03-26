@@ -8,9 +8,9 @@ import type { PromptPatch } from "../types/feedback.js";
 export function synthesizeFeedback(analysis: AnalysisResult): PromptPatch {
   const sections: string[] = [];
 
-  // Generate avoidance guidance from high-frequency failure patterns
+  // Generate avoidance guidance from failure patterns (any frequency >= 0.3)
   for (const pattern of analysis.failurePatterns) {
-    if (pattern.frequency < 0.5) continue;
+    if (pattern.frequency < 0.3) continue;
     sections.push(generateAvoidance(pattern));
   }
 
@@ -25,11 +25,21 @@ export function synthesizeFeedback(analysis: AnalysisResult): PromptPatch {
     sections.push(generateStepGuidance(step));
   }
 
-  // Add efficiency note if many runs had redundant actions
-  const avgPassRate = analysis.passRate;
-  if (avgPassRate < 1 && sections.length === 0) {
+  // Generate from generalized reasons (catch-all insights)
+  for (const reason of analysis.generalizedReasons.failures) {
+    // Avoid duplicating patterns already covered above
+    const alreadyCovered = sections.some((s) =>
+      s.toLowerCase().includes(reason.slice(0, 30).toLowerCase()),
+    );
+    if (!alreadyCovered) {
+      sections.push(`CRITICAL: ${reason}`);
+    }
+  }
+
+  // Add concrete procedural guidance when the model fails to interact
+  if (analysis.passRate === 0 && sections.length > 0) {
     sections.push(
-      `NOTE: Only ${(avgPassRate * 100).toFixed(0)}% of runs succeeded. Focus on completing the core task before optimizing.`,
+      `PROCEDURE: After opening a URL, you MUST take a snapshot to see interactive elements, then use fill/click/type to interact with them. Do NOT repeat the same action. Follow this sequence: open URL → snapshot → identify the target element @ref → fill or click that element → verify result with snapshot.`,
     );
   }
 
@@ -48,9 +58,9 @@ export function synthesizeFeedback(analysis: AnalysisResult): PromptPatch {
 function generateAvoidance(pattern: import("../types/pattern.js").FailurePattern): string {
   const stepsInfo =
     pattern.atSteps.length > 0
-      ? ` (typically around step ${pattern.atSteps[0]})`
+      ? ` (around step ${pattern.atSteps[0]})`
       : "";
-  return `AVOID${stepsInfo}: ${pattern.description} [occurred in ${(pattern.frequency * 100).toFixed(0)}% of runs]`;
+  return `AVOID${stepsInfo}: ${pattern.description} [${(pattern.frequency * 100).toFixed(0)}% of runs]`;
 }
 
 function generateReinforcement(pattern: import("../types/pattern.js").SuccessPattern): string {

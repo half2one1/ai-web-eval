@@ -13,8 +13,12 @@ export function analyzePatterns(report: ObservationReport): AnalysisResult {
 
   log.info(`Analyzing patterns: ${totalRuns} runs, ${passedRuns.length} passed (${(passRate * 100).toFixed(0)}%)`);
 
-  // Cluster failures across failed runs
-  const failurePatterns = clusterFailures(failedRuns.map((r) => r.trace));
+  // Cluster failures across ALL runs (failed runs are the primary input,
+  // but strategic patterns are detected across all runs)
+  const tracesForFailure = failedRuns.length > 0
+    ? failedRuns.map((r) => r.trace)
+    : runs.map((r) => r.trace); // If all failed, use all runs
+  const failurePatterns = clusterFailures(tracesForFailure);
 
   // Extract success patterns from passing runs
   const successPatterns = extractSuccessPatterns(passedRuns.map((r) => r.trace));
@@ -31,6 +35,15 @@ export function analyzePatterns(report: ObservationReport): AnalysisResult {
       .filter((p) => p.consistency >= 0.8)
       .map((p) => p.description),
   };
+
+  // Add score-based insights when all runs fail
+  if (passRate === 0 && generalizedReasons.failures.length === 0) {
+    generalizedReasons.failures.push(
+      `All ${totalRuns} runs failed to complete the task. The model may not be capable enough for this task type.`,
+    );
+  }
+
+  log.info(`Patterns found: ${failurePatterns.length} failure, ${successPatterns.length} success, ${criticalSteps.length} critical steps`);
 
   return {
     taskId,
@@ -51,7 +64,6 @@ function findCriticalSteps(report: ObservationReport) {
 
   const criticalSteps: AnalysisResult["criticalSteps"] = [];
 
-  // Compare action at each step index
   const maxSteps = Math.max(
     ...report.runs.map((r) => r.trace.actions.length),
   );
@@ -66,7 +78,6 @@ function findCriticalSteps(report: ObservationReport) {
 
     if (passActions.length === 0 || failActions.length === 0) continue;
 
-    // Find dominant action in each group
     const passMode = mode(passActions);
     const failMode = mode(failActions);
 
