@@ -45,7 +45,7 @@ export async function runAgent(
   const client = new OpenAI({
     baseURL: cfg.apiUrl,
     apiKey: "lm-studio",
-    timeout: 120_000, // 2 minute per-request timeout
+    timeout: 300_000, // 5 minute per-request timeout (large models need time)
   });
 
   const resolvedMode: AgentMode = task.mode || "auto";
