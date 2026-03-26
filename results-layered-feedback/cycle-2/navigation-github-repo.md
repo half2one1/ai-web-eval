@@ -1,6 +1,6 @@
 # Cycle 2 — navigation-github-repo
 
-Generated: 2026-03-26T22:41:57.316Z
+Generated: 2026-03-26T22:43:11.076Z
 
 ## Summary
 - **Total runs**: 3
@@ -12,15 +12,15 @@ Generated: 2026-03-26T22:41:57.316Z
 ## Run Scores
 | Run | Passed | Overall | Completion | Efficiency | Accuracy | Steps |
 |-----|--------|---------|------------|------------|----------|-------|
-| 1 | YES | 0.89 | 1.00 | 0.67 | 0.89 | 9 |
-| 2 | YES | 0.94 | 1.00 | 0.75 | 1.00 | 8 |
-| 3 | YES | 0.92 | 1.00 | 0.67 | 1.00 | 9 |
+| 1 | YES | 0.94 | 1.00 | 0.75 | 1.00 | 8 |
+| 2 | YES | 0.86 | 1.00 | 0.55 | 0.91 | 11 |
+| 3 | YES | 0.96 | 1.00 | 0.86 | 1.00 | 7 |
 
 ## Failure Patterns
-- **Model frequently fails at 'get' around step 6: Missing arguments for: get text
-Usage: agent-browser get text <selector>
-** (frequency: 33%, steps: 6)
 - **Model redundantly repeats 'snapshot' around step 1 without state change** (frequency: 33%, steps: 1)
+- **Model frequently fails at 'get' around step 2: Missing arguments for: get text
+Usage: agent-browser get text <selector>
+** (frequency: 33%, steps: 2)
 
 ## Success Patterns
 - **Successful runs average 8.7 actions, primarily using: click, snapshot, open** (consistency: 90%)

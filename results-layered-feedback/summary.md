@@ -1,14 +1,14 @@
 # Evaluation Summary
 
-Generated: 2026-03-26T22:41:57.323Z
+Generated: 2026-03-26T22:43:11.087Z
 
 Total cycles: 2
 
 ## Cycle Progress
 | Cycle | Tasks | Avg Pass Rate | Avg Score |
 |-------|-------|---------------|-----------|
-| 1 | 4 | 75% | 0.89 |
-| 2 | 4 | 83% | 0.95 |
+| 1 | 4 | 67% | 0.92 |
+| 2 | 4 | 83% | 0.93 |
 
 ## Task Progression
 
@@ -29,5 +29,5 @@ FIX: Once you've accomplished the goal, immediately call task_complete with a su
 - Cycle 2: pass rate 100%
 
 ### navigation-github-repo
-- Cycle 1: pass rate 100%
+- Cycle 1: pass rate 67%
 - Cycle 2: pass rate 100%

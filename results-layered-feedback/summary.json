@@ -12,9 +12,9 @@
       {
         "taskId": "info-lookup-wikipedia",
         "passRate": 0,
-        "failurePatterns": 2,
+        "failurePatterns": 1,
         "successPatterns": 0,
-        "feedbackLength": 755
+        "feedbackLength": 537
       },
       {
         "taskId": "law-search-korea",
@@ -25,9 +25,9 @@
       },
       {
         "taskId": "navigation-github-repo",
-        "passRate": 1,
-        "failurePatterns": 1,
-        "successPatterns": 1,
+        "passRate": 0.6666666666666666,
+        "failurePatterns": 3,
+        "successPatterns": 2,
         "feedbackLength": 0
       }
     ]
@@ -47,12 +47,12 @@
         "passRate": 0.3333333333333333,
         "failurePatterns": 1,
         "successPatterns": 0,
-        "feedbackLength": 1132
+        "feedbackLength": 1129
       },
       {
         "taskId": "law-search-korea",
         "passRate": 1,
-        "failurePatterns": 2,
+        "failurePatterns": 6,
         "successPatterns": 3,
         "feedbackLength": 0
       },
