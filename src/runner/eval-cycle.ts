@@ -74,7 +74,7 @@ export async function runEvalCycle(
       // IMPROVEMENT PHASE
       let updatedFeedback = currentFeedback;
       if (analysis.passRate < 1.0) {
-        const patch = synthesizeFeedback(analysis);
+        const patch = synthesizeFeedback(analysis, observation);
         updatedFeedback = injectFeedback(currentFeedback, patch);
         feedbackMap.set(task.id, updatedFeedback);
         log.info(`Generated feedback patch (${patch.patternCount} patterns)`);

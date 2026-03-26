@@ -42,7 +42,11 @@ export async function runAgent(
   config: Partial<HarnessConfig> = {},
 ): Promise<ActionTrace> {
   const cfg = { ...DEFAULT_CONFIG, ...config };
-  const client = new OpenAI({ baseURL: cfg.apiUrl, apiKey: "lm-studio" });
+  const client = new OpenAI({
+    baseURL: cfg.apiUrl,
+    apiKey: "lm-studio",
+    timeout: 120_000, // 2 minute per-request timeout
+  });
 
   const resolvedMode: AgentMode = task.mode || "auto";
   let adapter = createAdapter(resolvedMode);

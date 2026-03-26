@@ -1,0 +1,68 @@
+[
+  {
+    "cycle": 1,
+    "tasks": [
+      {
+        "taskId": "form-fill-naver-search",
+        "passRate": 0,
+        "failurePatterns": 1,
+        "successPatterns": 0,
+        "feedbackLength": 579
+      },
+      {
+        "taskId": "info-lookup-wikipedia",
+        "passRate": 0,
+        "failurePatterns": 1,
+        "successPatterns": 0,
+        "feedbackLength": 579
+      },
+      {
+        "taskId": "law-search-korea",
+        "passRate": 0.6666666666666666,
+        "failurePatterns": 2,
+        "successPatterns": 2,
+        "feedbackLength": 1051
+      },
+      {
+        "taskId": "navigation-github-repo",
+        "passRate": 1,
+        "failurePatterns": 1,
+        "successPatterns": 2,
+        "feedbackLength": 0
+      }
+    ]
+  },
+  {
+    "cycle": 2,
+    "tasks": [
+      {
+        "taskId": "form-fill-naver-search",
+        "passRate": 1,
+        "failurePatterns": 0,
+        "successPatterns": 2,
+        "feedbackLength": 579
+      },
+      {
+        "taskId": "info-lookup-wikipedia",
+        "passRate": 0.6666666666666666,
+        "failurePatterns": 1,
+        "successPatterns": 2,
+        "feedbackLength": 1889
+      },
+      {
+        "taskId": "law-search-korea",
+        "passRate": 1,
+        "failurePatterns": 3,
+        "successPatterns": 3,
+        "feedbackLength": 1051
+      },
+      {
+        "taskId": "navigation-github-repo",
+        "passRate": 1,
+        "failurePatterns": 2,
+        "successPatterns": 2,
+        "feedbackLength": 0
+      }
+    ]
+  }
+]
