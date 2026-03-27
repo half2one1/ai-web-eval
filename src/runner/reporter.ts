@@ -2,6 +2,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ObservationReport } from "../types/score.js";
 import type { AnalysisResult } from "../types/pattern.js";
+import type { PromptPatch } from "../types/feedback.js";
 import type { CycleResult } from "./eval-cycle.js";
 import { log } from "../utils/logger.js";
 
@@ -32,6 +33,62 @@ export async function writeReport(
   writeFileSync(mdPath, md);
 
   log.info(`Report written: ${dir}/${taskId}.*`);
+}
+
+/**
+ * Write the synthesis prompt and generated feedback for later review.
+ * Creates a {taskId}.synthesis.md file in the cycle directory.
+ */
+export async function writeSynthesisLog(
+  outputDir: string,
+  cycle: number,
+  taskId: string,
+  patch: PromptPatch,
+): Promise<void> {
+  const dir = join(outputDir, `cycle-${cycle}`);
+  ensureDir(dir);
+
+  const lines: string[] = [];
+  lines.push(`# Feedback Synthesis Log — ${taskId}`);
+  lines.push(`\nGenerated: ${patch.generatedAt}`);
+  lines.push(`Method: **${patch.method}**`);
+  if (patch.synthesisModel) {
+    lines.push(`Model: ${patch.synthesisModel}`);
+  }
+  lines.push(`Pass rate: ${(patch.basedOn.passRate * 100).toFixed(0)}% (${patch.basedOn.runs} runs)`);
+  lines.push(`Pattern count: ${patch.patternCount}`);
+
+  if (patch.synthesisPrompt) {
+    lines.push(`\n## Synthesis Prompt\n`);
+    lines.push("```");
+    lines.push(patch.synthesisPrompt);
+    lines.push("```");
+  }
+
+  lines.push(`\n## Generated Feedback\n`);
+  lines.push("```");
+  lines.push(patch.text);
+  lines.push("```");
+
+  const mdPath = join(dir, `${taskId}.synthesis.md`);
+  writeFileSync(mdPath, lines.join("\n"));
+
+  // Also write structured JSON for programmatic access
+  const jsonPath = join(dir, `${taskId}.synthesis.json`);
+  writeFileSync(jsonPath, JSON.stringify({
+    taskId,
+    cycle,
+    method: patch.method,
+    model: patch.synthesisModel || null,
+    passRate: patch.basedOn.passRate,
+    runs: patch.basedOn.runs,
+    patternCount: patch.patternCount,
+    generatedAt: patch.generatedAt,
+    synthesisPrompt: patch.synthesisPrompt || null,
+    generatedFeedback: patch.text,
+  }, null, 2));
+
+  log.info(`Synthesis log written: ${dir}/${taskId}.synthesis.*`);
 }
 
 function generateMarkdown(

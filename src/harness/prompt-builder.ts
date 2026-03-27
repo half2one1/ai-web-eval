@@ -62,7 +62,7 @@ export function buildSystemPrompt(
     parts.push(FC_INSTRUCTIONS);
   }
 
-  // Feedback injection
+  // Feedback injection (supports both legacy single-string and new layered format)
   if (feedback) {
     parts.push(`\n\n--- GUIDANCE FROM PREVIOUS EVALUATIONS ---\n${feedback}\n--- END GUIDANCE ---`);
   }

@@ -1,17 +1,28 @@
 import type { TaskDefinition } from "../types/task.js";
 import type { HarnessConfig } from "../harness/agent-harness.js";
-import type { AccumulatedFeedback } from "../types/feedback.js";
+import type {
+  AccumulatedFeedback,
+  SiteProfile,
+  ModelProfile,
+  LayeredFeedback,
+} from "../types/feedback.js";
 import type { AnalysisResult } from "../types/pattern.js";
 import type { ObservationReport } from "../types/score.js";
 import { observe, type ObservationConfig } from "./observation-runner.js";
 import { analyzePatterns } from "../analysis/pattern-analyzer.js";
 import { synthesizeFeedback } from "../feedback/feedback-synthesizer.js";
+import { synthesizeFeedbackWithAI } from "../feedback/ai-feedback-synthesizer.js";
 import {
   injectFeedback,
-  getFeedbackText,
   createEmptyFeedback,
+  buildLayeredFeedbackText,
 } from "../feedback/prompt-injector.js";
-import { writeReport, writeSummaryReport } from "./reporter.js";
+import {
+  extractDomain,
+  buildSiteProfile,
+} from "../feedback/site-profile-extractor.js";
+import { buildModelProfile } from "../feedback/model-profile-extractor.js";
+import { writeReport, writeSummaryReport, writeSynthesisLog } from "./reporter.js";
 import { log } from "../utils/logger.js";
 
 export interface CycleConfig {
@@ -20,6 +31,8 @@ export interface CycleConfig {
   harness: Partial<HarnessConfig>;
   overrideRuns?: number;
   outputDir: string;
+  /** Use AI-powered feedback synthesis instead of static templates */
+  aiSynthesis?: boolean;
 }
 
 export interface CycleResult {
@@ -37,22 +50,46 @@ export async function runEvalCycle(
   config: CycleConfig,
 ): Promise<CycleResult[]> {
   const allCycles: CycleResult[] = [];
-  const feedbackMap = new Map<string, AccumulatedFeedback>();
+
+  // Per-task accumulated feedback
+  const taskFeedbackMap = new Map<string, AccumulatedFeedback>();
+
+  // Site profiles: domain → SiteProfile
+  const siteProfileMap = new Map<string, SiteProfile>();
+
+  // Model profile (cross-domain)
+  let modelProfile: ModelProfile | null = null;
 
   for (let cycle = 1; cycle <= config.maxCycles; cycle++) {
     log.info(`\n========== CYCLE ${cycle}/${config.maxCycles} ==========`);
 
     const cycleResult: CycleResult = { cycle, tasks: [] };
 
+    // Collect all observations this cycle for cross-task analysis
+    const cycleObservations: Array<{
+      task: TaskDefinition;
+      domain: string;
+      observation: ObservationReport;
+      analysis: AnalysisResult;
+    }> = [];
+
     for (const task of tasks) {
       log.info(`\n--- Task: ${task.name} (${task.id}) ---`);
 
-      // Get current feedback for this task
-      const currentFeedback = feedbackMap.get(task.id) || createEmptyFeedback();
-      const feedbackText = getFeedbackText(currentFeedback);
+      const domain = extractDomain(task.url);
+      const currentTaskFeedback = taskFeedbackMap.get(task.id) || createEmptyFeedback();
+
+      // Build layered feedback for this task
+      const layered: LayeredFeedback = {
+        model: modelProfile,
+        site: siteProfileMap.get(domain) || null,
+        task: currentTaskFeedback,
+      };
+
+      const feedbackText = buildLayeredFeedbackText(layered);
 
       if (feedbackText) {
-        log.info("Injecting feedback from previous cycle:");
+        log.info("Injecting layered feedback:");
         log.debug(feedbackText);
       }
 
@@ -71,24 +108,78 @@ export async function runEvalCycle(
           `successes=${analysis.successPatterns.length}`,
       );
 
-      // IMPROVEMENT PHASE
-      let updatedFeedback = currentFeedback;
+      // TASK-LEVEL IMPROVEMENT
+      let updatedTaskFeedback = currentTaskFeedback;
       if (analysis.passRate < 1.0) {
-        const patch = synthesizeFeedback(analysis, observation);
-        updatedFeedback = injectFeedback(currentFeedback, patch);
-        feedbackMap.set(task.id, updatedFeedback);
-        log.info(`Generated feedback patch (${patch.patternCount} patterns)`);
+        let patch;
+        if (config.aiSynthesis) {
+          patch = await synthesizeFeedbackWithAI(
+            task,
+            analysis,
+            observation,
+            {
+              apiUrl: config.harness.apiUrl || "http://localhost:1234/v1",
+              model: config.harness.model || "default",
+            },
+            layered,
+          );
+        } else {
+          patch = synthesizeFeedback(analysis, observation);
+        }
+        updatedTaskFeedback = injectFeedback(currentTaskFeedback, patch);
+        taskFeedbackMap.set(task.id, updatedTaskFeedback);
+        log.info(`Generated task feedback patch [${patch.method}] (${patch.patternCount} patterns)`);
+
+        // Log synthesis prompt and result for review
+        await writeSynthesisLog(config.outputDir, cycle, task.id, patch);
       }
+
+      cycleObservations.push({ task, domain, observation, analysis });
 
       cycleResult.tasks.push({
         task,
         observation,
         analysis,
-        feedback: updatedFeedback,
+        feedback: updatedTaskFeedback,
       });
 
       // Write per-task report
       await writeReport(config.outputDir, cycle, task.id, observation, analysis);
+    }
+
+    // CROSS-TASK ANALYSIS: Update site profiles and model profile
+    // Group observations by domain
+    const byDomain = new Map<string, typeof cycleObservations>();
+    for (const obs of cycleObservations) {
+      const list = byDomain.get(obs.domain) || [];
+      list.push(obs);
+      byDomain.set(obs.domain, list);
+    }
+
+    // Update site profiles
+    for (const [domain, domainObs] of byDomain) {
+      const existingProfile = siteProfileMap.get(domain);
+      const siteObs = domainObs.map((o) => ({
+        taskId: o.task.id,
+        domain,
+        report: o.observation,
+        analysis: o.analysis,
+      }));
+      const profile = buildSiteProfile(domain, siteObs, existingProfile);
+      siteProfileMap.set(domain, profile);
+      log.info(`Updated site profile: ${domain} (${profile.structure.length} structure, ${profile.pitfalls.length} pitfalls, ${profile.strategies.length} strategies)`);
+    }
+
+    // Update model profile (cross-domain)
+    const allDomainObs = cycleObservations.map((o) => ({
+      domain: o.domain,
+      taskId: o.task.id,
+      analysis: o.analysis,
+      report: o.observation,
+    }));
+    modelProfile = buildModelProfile(allDomainObs, modelProfile || undefined);
+    if (modelProfile.weaknesses.length > 0) {
+      log.info(`Model profile: ${modelProfile.weaknesses.length} cross-domain weaknesses detected`);
     }
 
     allCycles.push(cycleResult);
