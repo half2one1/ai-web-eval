@@ -19,7 +19,7 @@ const DEFAULT_CONFIG: AISynthesisConfig = {
   apiUrl: "http://localhost:1234/v1",
   model: "default",
   temperature: 0.3,
-  maxTokens: 1024,
+  maxTokens: 4096,
 };
 
 /**
@@ -113,18 +113,18 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
     const traceActions = run.trace.actions;
     const actionSummary = traceActions.map((a) => {
       const brief = describeActionBrief(a, traceActions);
-      const status = a.result.success ? "ok" : `FAIL: ${a.result.error?.slice(0, 60) || "unknown"}`;
+      const status = a.result.success ? "ok" : `FAIL: ${a.result.error || "unknown"}`;
       return `  ${a.index + 1}. ${brief} -> ${status}`;
     });
 
     // Include thoughts if present
     const thoughts = run.trace.thoughts.filter(Boolean).slice(0, 3);
     const thoughtStr = thoughts.length > 0
-      ? `\n  Thoughts: ${thoughts.map((t) => `"${t.slice(0, 80)}"`).join("; ")}`
+      ? `\n  Thoughts: ${thoughts.map((t) => `"${t}"`).join("; ")}`
       : "";
 
     const completionStr = run.trace.completed
-      ? `\n  Completion: "${run.trace.completionSummary?.slice(0, 100) || "no summary"}"`
+      ? `\n  Completion: "${run.trace.completionSummary || "no summary"}"`
       : "\n  Did NOT call task_complete";
 
     // Score breakdown
@@ -150,7 +150,7 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
       }
     }
     if (existingFeedback.task.totalText) {
-      existingParts.push(`Previous task feedback: ${existingFeedback.task.totalText.slice(0, 300)}`);
+      existingParts.push(`Previous task feedback: ${existingFeedback.task.totalText}`);
     }
     if (existingParts.length > 0) {
       sections.push(`## Existing Feedback (from prior cycles)\n${existingParts.join("\n")}`);
@@ -164,7 +164,7 @@ Based on the analysis and traces above, write feedback for the agent. Follow the
 1. **Be specific**: Reference concrete actions, element descriptions, page states, and error messages from the traces. Use element names (e.g. 'the "Search" button') not abstract refs.
 2. **Be actionable**: Each piece of feedback should tell the agent exactly what to DO differently
 3. **Prioritize**: Address the most impactful issues first (highest frequency failures, critical divergence points)
-4. **Be concise**: Keep total feedback under 800 characters. The agent has limited prompt space
+4. **Be thorough**: Provide complete, detailed feedback. Cover all identified issues with full explanations and instructions
 5. **Don't repeat**: If existing feedback already covers an issue, skip it or refine it — don't duplicate
 6. **Use imperative tone**: Write as direct instructions ("Take a snapshot before...", "Do NOT repeat...")
 
@@ -223,8 +223,7 @@ export async function synthesizeFeedbackWithAI(
       return fallback;
     }
 
-    // Trim to budget (task-level max is 800 chars)
-    const text = content.length > 800 ? content.slice(0, 797) + "..." : content;
+    const text = content;
 
     log.info(`AI synthesis succeeded: ${text.length} chars`);
 

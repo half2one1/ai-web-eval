@@ -6,10 +6,10 @@ import type {
   SiteProfile,
 } from "../types/feedback.js";
 
-const MAX_FEEDBACK_LENGTH = 2000;
-const MAX_MODEL_LENGTH = 400;
-const MAX_SITE_LENGTH = 800;
-const MAX_TASK_LENGTH = 800;
+const MAX_FEEDBACK_LENGTH = 16000;
+const MAX_MODEL_LENGTH = 4000;
+const MAX_SITE_LENGTH = 4000;
+const MAX_TASK_LENGTH = 8000;
 
 export function createEmptyFeedback(): AccumulatedFeedback {
   return { patches: [], totalText: "" };
@@ -112,28 +112,28 @@ function formatSiteFeedback(profile: SiteProfile): string | null {
 
   if (profile.structure.length > 0) {
     lines.push("Structure:");
-    for (const note of profile.structure.slice(0, 3)) {
+    for (const note of profile.structure) {
       lines.push(`  • ${note}`);
     }
   }
 
   if (profile.pitfalls.length > 0) {
     lines.push("Known pitfalls:");
-    for (const pitfall of profile.pitfalls.slice(0, 3)) {
+    for (const pitfall of profile.pitfalls) {
       lines.push(`  ⚠ ${pitfall}`);
     }
   }
 
   if (profile.strategies.length > 0) {
     lines.push("Proven strategies:");
-    for (const strategy of profile.strategies.slice(0, 3)) {
+    for (const strategy of profile.strategies) {
       lines.push(`  → ${strategy}`);
     }
   }
 
   if (profile.navigationPatterns.length > 0) {
     lines.push("Navigation patterns:");
-    for (const pattern of profile.navigationPatterns.slice(0, 3)) {
+    for (const pattern of profile.navigationPatterns) {
       lines.push(`  → ${pattern}`);
     }
   }

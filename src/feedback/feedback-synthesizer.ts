@@ -248,7 +248,7 @@ function analyzeTraces(report: ObservationReport, analysis: AnalysisResult): str
   const uniqueSequences = new Set(actionSequences);
   if (uniqueSequences.size === 1 && runs.length >= 3 && analysis.passRate === 0) {
     insights.push(
-      `STUCK IN PATTERN: All ${runs.length} runs follow the exact same action sequence: ${actionSequences[0].slice(0, 100)}. ` +
+      `STUCK IN PATTERN: All ${runs.length} runs follow the exact same action sequence: ${actionSequences[0]}. ` +
       `Try a fundamentally different approach — different element targets, different action order, or explore the page more before acting.`,
     );
   }
@@ -289,7 +289,7 @@ function analyzeTraces(report: ObservationReport, analysis: AnalysisResult): str
     if (confusedThoughts.length >= 2) {
       insights.push(
         `CONFUSION DETECTED: Model expressed uncertainty in ${confusedThoughts.length} instances. ` +
-        `Example: "${confusedThoughts[0].slice(0, 100)}". ` +
+        `Example: "${confusedThoughts[0]}". ` +
         `When unsure, take a snapshot to see current page state, then identify specific interactive elements to target.`,
       );
     }

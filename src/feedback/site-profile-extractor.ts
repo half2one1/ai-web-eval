@@ -181,7 +181,7 @@ function abstractError(action: TracedAction): string | null {
 
   // Generic but still useful if frequent
   if (error.length > 10) {
-    return `'${actionName}' commonly fails on this site: ${error.slice(0, 80)}`;
+    return `'${actionName}' commonly fails on this site: ${error}`;
   }
 
   return null;
