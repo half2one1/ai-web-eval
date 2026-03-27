@@ -6,6 +6,12 @@ export interface PromptPatch {
   };
   patternCount: number;
   generatedAt: string;
+  /** How this feedback was generated: "static" (template) or "ai" (LLM synthesis) */
+  method: "static" | "ai";
+  /** The full prompt sent to the LLM for synthesis (only for method="ai") */
+  synthesisPrompt?: string;
+  /** The model used for synthesis (only for method="ai") */
+  synthesisModel?: string;
 }
 
 export interface ImprovementRecord {

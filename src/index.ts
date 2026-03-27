@@ -6,8 +6,9 @@ import { loadTask, loadTaskDir } from "./tasks/task-loader.js";
 import { observe } from "./runner/observation-runner.js";
 import { analyzePatterns } from "./analysis/pattern-analyzer.js";
 import { synthesizeFeedback } from "./feedback/feedback-synthesizer.js";
+import { synthesizeFeedbackWithAI } from "./feedback/ai-feedback-synthesizer.js";
 import { runEvalCycle } from "./runner/eval-cycle.js";
-import { writeReport } from "./runner/reporter.js";
+import { writeReport, writeSynthesisLog } from "./runner/reporter.js";
 import { log, setLogLevel } from "./utils/logger.js";
 
 function printUsage(): void {
@@ -26,6 +27,7 @@ Options:
   --runs <n>                Override observation runs per task (min 3)
   --max-cycles <n>          Max improvement cycles (default: 3)
   --target-pass-rate <f>    Stop when pass rate >= this (default: 0.9)
+  --ai-synthesis            Use AI model for feedback synthesis (default: static templates)
   --headed                  Show browser window (not implemented yet)
   --verbose                 Debug logging
   --output-dir <dir>        Results directory (default: ./results)
@@ -42,6 +44,7 @@ async function main(): Promise<void> {
       runs: { type: "string" },
       "max-cycles": { type: "string", default: "3" },
       "target-pass-rate": { type: "string", default: "0.9" },
+      "ai-synthesis": { type: "boolean", default: false },
       headed: { type: "boolean", default: false },
       verbose: { type: "boolean", default: false },
       "output-dir": { type: "string", default: "./results" },
@@ -109,19 +112,33 @@ async function main(): Promise<void> {
         }
       }
 
-      // Also show what feedback would be generated
-      const feedback = synthesizeFeedback(analysis);
+      // Generate and show feedback
+      const aiSynthesis = values["ai-synthesis"] as boolean;
+      let feedback;
+      if (aiSynthesis) {
+        feedback = await synthesizeFeedbackWithAI(task, analysis, report, {
+          apiUrl: harnessConfig.apiUrl,
+          model: harnessConfig.model,
+        });
+      } else {
+        feedback = synthesizeFeedback(analysis, report);
+      }
       if (feedback.patternCount > 0) {
-        console.log("\nGenerated feedback:");
+        console.log(`\nGenerated feedback [${feedback.method}]:`);
         console.log(feedback.text);
       }
+
+      // Log synthesis prompt for review
+      await writeSynthesisLog(outputDir, 0, task.id, feedback);
     }
   } else if (command === "cycle") {
     const maxCycles = parseInt(values["max-cycles"]!, 10);
     const targetPassRate = parseFloat(values["target-pass-rate"]!);
 
+    const aiSynthesis = values["ai-synthesis"] as boolean;
     log.info(
-      `Starting eval cycle: ${tasks.length} tasks, max ${maxCycles} cycles, target ${(targetPassRate * 100).toFixed(0)}%`,
+      `Starting eval cycle: ${tasks.length} tasks, max ${maxCycles} cycles, target ${(targetPassRate * 100).toFixed(0)}%` +
+      (aiSynthesis ? ", AI synthesis enabled" : ""),
     );
 
     const results = await runEvalCycle(tasks, {
@@ -130,6 +147,7 @@ async function main(): Promise<void> {
       harness: harnessConfig,
       overrideRuns,
       outputDir,
+      aiSynthesis,
     });
 
     // Print final summary

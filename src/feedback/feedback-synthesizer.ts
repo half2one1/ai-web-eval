@@ -63,6 +63,7 @@ export function synthesizeFeedback(
     basedOn: { runs: analysis.totalRuns, passRate: analysis.passRate },
     patternCount: analysis.failurePatterns.length + analysis.successPatterns.length,
     generatedAt: new Date().toISOString(),
+    method: "static",
   };
 }
 

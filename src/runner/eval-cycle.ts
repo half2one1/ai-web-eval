@@ -11,6 +11,7 @@ import type { ObservationReport } from "../types/score.js";
 import { observe, type ObservationConfig } from "./observation-runner.js";
 import { analyzePatterns } from "../analysis/pattern-analyzer.js";
 import { synthesizeFeedback } from "../feedback/feedback-synthesizer.js";
+import { synthesizeFeedbackWithAI } from "../feedback/ai-feedback-synthesizer.js";
 import {
   injectFeedback,
   createEmptyFeedback,
@@ -21,7 +22,7 @@ import {
   buildSiteProfile,
 } from "../feedback/site-profile-extractor.js";
 import { buildModelProfile } from "../feedback/model-profile-extractor.js";
-import { writeReport, writeSummaryReport } from "./reporter.js";
+import { writeReport, writeSummaryReport, writeSynthesisLog } from "./reporter.js";
 import { log } from "../utils/logger.js";
 
 export interface CycleConfig {
@@ -30,6 +31,8 @@ export interface CycleConfig {
   harness: Partial<HarnessConfig>;
   overrideRuns?: number;
   outputDir: string;
+  /** Use AI-powered feedback synthesis instead of static templates */
+  aiSynthesis?: boolean;
 }
 
 export interface CycleResult {
@@ -108,10 +111,27 @@ export async function runEvalCycle(
       // TASK-LEVEL IMPROVEMENT
       let updatedTaskFeedback = currentTaskFeedback;
       if (analysis.passRate < 1.0) {
-        const patch = synthesizeFeedback(analysis, observation);
+        let patch;
+        if (config.aiSynthesis) {
+          patch = await synthesizeFeedbackWithAI(
+            task,
+            analysis,
+            observation,
+            {
+              apiUrl: config.harness.apiUrl || "http://localhost:1234/v1",
+              model: config.harness.model || "default",
+            },
+            layered,
+          );
+        } else {
+          patch = synthesizeFeedback(analysis, observation);
+        }
         updatedTaskFeedback = injectFeedback(currentTaskFeedback, patch);
         taskFeedbackMap.set(task.id, updatedTaskFeedback);
-        log.info(`Generated task feedback patch (${patch.patternCount} patterns)`);
+        log.info(`Generated task feedback patch [${patch.method}] (${patch.patternCount} patterns)`);
+
+        // Log synthesis prompt and result for review
+        await writeSynthesisLog(config.outputDir, cycle, task.id, patch);
       }
 
       cycleObservations.push({ task, domain, observation, analysis });
