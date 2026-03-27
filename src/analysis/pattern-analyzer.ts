@@ -3,6 +3,7 @@ import type { AnalysisResult } from "../types/pattern.js";
 import { clusterFailures } from "./failure-clusterer.js";
 import { extractSuccessPatterns } from "./success-extractor.js";
 import { log } from "../utils/logger.js";
+import { describeStepContext } from "../utils/trace-context.js";
 
 export function analyzePatterns(report: ObservationReport): AnalysisResult {
   const { taskId, runs } = report;
@@ -102,11 +103,17 @@ function findCriticalSteps(report: ObservationReport) {
     const failMode = mode(failActions);
 
     if (passMode && failMode && passMode !== failMode) {
+      // Build contextual description from a representative trace
+      const repTrace = passed[0]?.trace || failed[0]?.trace;
+      const ctx = repTrace
+        ? describeStepContext(step, repTrace.actions)
+        : `at step ${step}`;
+
       criticalSteps.push({
         stepIndex: step,
         successAction: passMode,
         failureAction: failMode,
-        description: `At step ${step}: successful runs use '${passMode}', failed runs use '${failMode}'`,
+        description: `${ctx}: successful runs use '${passMode}', failed runs use '${failMode}'`,
       });
     }
   }

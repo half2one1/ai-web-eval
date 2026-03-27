@@ -129,7 +129,7 @@ function extractDomainWeaknesses(observations: DomainObservation[]): string[] {
     }).length;
     if (noInteraction >= 2) {
       weaknesses.push(
-        "You sometimes only observe (snapshot) without ever interacting with the page. After taking a snapshot, identify elements by @ref and use fill/click/type to interact with them.",
+        "You sometimes only observe (snapshot) without ever interacting with the page. After taking a snapshot, identify interactive elements and use fill/click/type to interact with them.",
       );
     }
 

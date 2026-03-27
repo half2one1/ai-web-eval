@@ -1,6 +1,8 @@
 import type { AnalysisResult, FailurePattern, SuccessPattern, CriticalStep } from "../types/pattern.js";
 import type { PromptPatch } from "../types/feedback.js";
 import type { ObservationReport } from "../types/score.js";
+import type { TracedAction } from "../types/trace.js";
+import { resolveRef, describeStepContext, describeActionBrief } from "../utils/trace-context.js";
 
 /**
  * Transform analysis results into specific, actionable prompt guidance
@@ -12,10 +14,13 @@ export function synthesizeFeedback(
 ): PromptPatch {
   const sections: string[] = [];
 
+  // Collect trace actions for contextual ref resolution
+  const reportTraces = report?.runs.map((r) => r.trace.actions);
+
   // 1. Generate specific failure corrections with concrete examples
   for (const pattern of analysis.failurePatterns) {
     if (pattern.frequency < 0.3) continue;
-    sections.push(generateActionableCorrection(pattern));
+    sections.push(generateActionableCorrection(pattern, reportTraces));
   }
 
   // 2. Generate reinforcement from success patterns with concrete sequences
@@ -67,14 +72,21 @@ export function synthesizeFeedback(
   };
 }
 
-function generateActionableCorrection(pattern: FailurePattern): string {
+function generateActionableCorrection(
+  pattern: FailurePattern,
+  reportTraces?: TracedAction[][],
+): string {
   const freq = `${(pattern.frequency * 100).toFixed(0)}%`;
   const lines: string[] = [];
 
-  // Extract concrete examples to make the correction specific
+  // Resolve example actions with element context instead of raw @refs
   const exampleActions = pattern.examples
     .slice(0, 3)
     .map((e) => {
+      const traceActions = reportTraces?.[e.runIndex];
+      if (traceActions) {
+        return `${describeActionBrief(traceActions[e.actionIndex], traceActions)}${e.error ? ` → ERROR: ${e.error}` : ""}`;
+      }
       const argsStr = Object.entries(e.args)
         .filter(([k]) => k !== "_toolCallId")
         .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
@@ -82,19 +94,22 @@ function generateActionableCorrection(pattern: FailurePattern): string {
       return `${e.action}(${argsStr})${e.error ? ` → ERROR: ${e.error}` : ""}`;
     });
 
+  // Build a contextual location description from the first example
+  const locationDesc = buildLocationDesc(pattern, reportTraces);
+
   // Detect specific failure types and generate targeted fixes
   if (pattern.description.includes("loop") || pattern.description.includes("repeating")) {
     const loopedAction = pattern.examples[0]?.action || "unknown";
     lines.push(`STOP REPEATING: You got stuck calling '${loopedAction}' multiple times (${freq} of runs).`);
     lines.push(`FIX: After calling '${loopedAction}' once, read the result carefully. If it didn't work, try a DIFFERENT action or target. For example:`);
-    lines.push(`  - If '${loopedAction}' on one element failed, try a different element @ref`);
+    lines.push(`  - If '${loopedAction}' on one element failed, try a different element`);
     lines.push(`  - If you're stuck navigating, take a snapshot to discover new interactive elements`);
     lines.push(`  - If a form isn't submitting, try 'press' with Enter key instead of clicking`);
   } else if (pattern.description.includes("never used any interactive")) {
     lines.push(`MUST INTERACT: You never used fill/click/type in ${freq} of runs — you only observed without acting.`);
-    lines.push(`FIX: After taking a snapshot, identify elements by their @ref and:`);
-    lines.push(`  - Use 'fill' with @ref and value to type in input fields`);
-    lines.push(`  - Use 'click' with @ref to click buttons/links`);
+    lines.push(`FIX: After taking a snapshot, identify interactive elements and:`);
+    lines.push(`  - Use 'fill' to type in input fields`);
+    lines.push(`  - Use 'click' to click buttons/links`);
     lines.push(`  - Use 'press' with key name for keyboard actions (Enter, Tab)`);
   } else if (pattern.description.includes("never signaled task completion")) {
     lines.push(`MUST COMPLETE: You never called task_complete/done (${freq} of runs) — you ran out of steps.`);
@@ -102,11 +117,11 @@ function generateActionableCorrection(pattern: FailurePattern): string {
   } else if (pattern.description.includes("fails at")) {
     const failedAction = pattern.examples[0]?.action || "unknown";
     const errorMsg = pattern.examples[0]?.error || "";
-    lines.push(`FIX '${failedAction}': This action fails in ${freq} of runs around step ${pattern.atSteps[0] || "?"}.`);
+    lines.push(`FIX '${failedAction}': This action fails in ${freq} of runs ${locationDesc}.`);
     if (errorMsg) lines.push(`  Common error: ${errorMsg}`);
     lines.push(`  Before calling '${failedAction}', take a snapshot to verify the target element exists and is interactive.`);
     if (failedAction === "click" || failedAction === "fill") {
-      lines.push(`  Make sure you're using the correct @ref from the most recent snapshot — refs change after page navigation.`);
+      lines.push(`  Element refs change after page navigation — always snapshot first to get fresh refs.`);
     }
   } else if (pattern.description.includes("redundantly repeats")) {
     const repeatedAction = pattern.examples[0]?.action || "unknown";
@@ -124,6 +139,25 @@ function generateActionableCorrection(pattern: FailurePattern): string {
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Build a human-readable location description for where a failure occurs,
+ * using trace context instead of bare step numbers.
+ */
+function buildLocationDesc(
+  pattern: FailurePattern,
+  reportTraces?: TracedAction[][],
+): string {
+  if (pattern.examples.length === 0) return "";
+
+  const ex = pattern.examples[0];
+  const traceActions = reportTraces?.[ex.runIndex];
+  if (traceActions && ex.actionIndex >= 0 && ex.actionIndex < traceActions.length) {
+    return describeStepContext(ex.actionIndex, traceActions);
+  }
+
+  return `around step ${pattern.atSteps[0] || "?"}`;
 }
 
 function generateConcreteReinforcement(pattern: SuccessPattern): string {
@@ -144,10 +178,9 @@ function generateConcreteReinforcement(pattern: SuccessPattern): string {
 
 function generateStepGuidance(step: CriticalStep): string {
   return [
-    `CRITICAL STEP ${step.stepIndex}: This is where runs succeed or fail.`,
+    `CRITICAL DECISION (${step.description}):`,
     `  DO: Use '${step.successAction}' at this point.`,
     `  DON'T: Using '${step.failureAction}' here leads to failure.`,
-    `  ${step.description}`,
   ].join("\n");
 }
 
@@ -220,20 +253,28 @@ function analyzeTraces(report: ObservationReport, analysis: AnalysisResult): str
     );
   }
 
-  // Insight: Specific element interaction failures
-  const elementFailures = new Map<string, number>();
+  // Insight: Specific element interaction failures (with resolved element descriptions)
+  const elementFailures = new Map<string, { count: number; desc: string }>();
   for (const run of runs) {
     for (const action of run.trace.actions) {
       if (!action.result.success && action.args.ref) {
-        const key = `${action.action}(${action.args.ref})`;
-        elementFailures.set(key, (elementFailures.get(key) || 0) + 1);
+        const ref = String(action.args.ref);
+        const resolved = resolveRef(ref, run.trace.actions, action.index);
+        const key = `${action.action}:${ref}`;
+        const desc = `${action.action}(${resolved})`;
+        const existing = elementFailures.get(key);
+        if (existing) {
+          existing.count++;
+        } else {
+          elementFailures.set(key, { count: 1, desc });
+        }
       }
     }
   }
-  for (const [action, count] of elementFailures) {
+  for (const [, { count, desc }] of elementFailures) {
     if (count >= 2) {
       insights.push(
-        `BROKEN TARGET: '${action}' failed in ${count}/${runs.length} runs. This element may not exist or not be interactive. Take a fresh snapshot and find the correct @ref.`,
+        `BROKEN TARGET: '${desc}' failed in ${count}/${runs.length} runs. This element may not exist or not be interactive. Take a fresh snapshot and find the correct target.`,
       );
     }
   }
@@ -249,7 +290,7 @@ function analyzeTraces(report: ObservationReport, analysis: AnalysisResult): str
       insights.push(
         `CONFUSION DETECTED: Model expressed uncertainty in ${confusedThoughts.length} instances. ` +
         `Example: "${confusedThoughts[0].slice(0, 100)}". ` +
-        `When unsure, take a snapshot to see current page state, then identify specific interactive elements by their @ref labels.`,
+        `When unsure, take a snapshot to see current page state, then identify specific interactive elements to target.`,
       );
     }
   }
