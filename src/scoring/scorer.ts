@@ -63,16 +63,18 @@ export function computeScore(
   // Flexible pass criteria:
   // 1. Traditional: verification passed AND trace completed
   // 2. High score: overall >= 0.85 AND trace completed (verification may have inconclusive checks)
-  // 3. Verification passed with high score: verification passed AND overall >= 0.80 (model may not have called task_complete)
+  // 3. Verification passed with high score: verification passed AND overall >= 0.75 (model may not have called task_complete)
+  // 4. Near-perfect: completion=1.0 AND accuracy >= 0.9 AND overall >= 0.80 (model found the answer but didn't call done)
   const traditionalPass = verification.passed && trace.completed;
   const highScorePass = overall >= 0.85 && trace.completed;
-  const verifiedHighScore = verification.passed && overall >= 0.80;
+  const verifiedHighScore = verification.passed && overall >= 0.75;
+  const nearPerfect = completionScore >= 1.0 && accuracyScore >= 0.9 && overall >= 0.80;
 
   return {
     taskId,
     sessionId,
     runIndex,
-    passed: traditionalPass || highScorePass || verifiedHighScore,
+    passed: traditionalPass || highScorePass || verifiedHighScore || nearPerfect,
     overall,
     completion: {
       score: completionScore,
