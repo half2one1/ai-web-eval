@@ -174,6 +174,49 @@ Output ONLY the feedback text. No headers, no markdown formatting, no explanatio
 }
 
 /**
+ * Validate and sanitize AI-generated feedback.
+ * Detects when the LLM echoes back trace data or think tags instead of
+ * producing actual feedback, and strips/rejects such responses.
+ */
+function sanitizeFeedback(raw: string): string | null {
+  let text = raw;
+
+  // Strip any <think>...</think> blocks (model reasoning leaked into output)
+  text = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+
+  // Strip orphaned </think> tags
+  text = text.replace(/<\/?think>\s*/g, "").trim();
+
+  // Detect if the response is mostly raw trace data (echoed input)
+  const tracePatterns = [
+    /^\s*\d+\.\s+(open|click|fill|snapshot|scroll|type|press|select|get|wait|screenshot|done)\(.*?\)\s*->\s*(ok|FAIL)/m,
+    /Did NOT call task_complete/,
+    /### Run \d+ \[(PASSED|FAILED)\]/,
+    /completion=\d+\.\d+, efficiency=\d+\.\d+, accuracy=\d+\.\d+/,
+  ];
+
+  const traceLineCount = text.split("\n").filter((line) =>
+    tracePatterns.some((p) => p.test(line)),
+  ).length;
+  const totalLines = text.split("\n").filter((l) => l.trim().length > 0).length;
+
+  // If more than 30% of non-empty lines look like trace data, it's echoed input
+  if (totalLines > 0 && traceLineCount / totalLines > 0.3) {
+    log.warn(
+      `AI synthesis response appears to be echoed trace data (${traceLineCount}/${totalLines} trace-like lines), rejecting`,
+    );
+    return null;
+  }
+
+  // If the response is too short after cleanup, reject
+  if (text.length < 20) {
+    return null;
+  }
+
+  return text;
+}
+
+/**
  * AI-powered feedback synthesizer.
  * Calls an LLM to interpret analysis results + raw traces and generate
  * nuanced, context-aware feedback. Falls back to static synthesis on failure.
@@ -207,6 +250,11 @@ export async function synthesizeFeedbackWithAI(
     const response = await client.chat.completions.create({
       model: cfg.model,
       messages: [
+        {
+          role: "system",
+          content:
+            "You are a web agent evaluator. Given analysis of a browsing agent's failed attempts, write concise, actionable feedback as direct instructions. Output ONLY the feedback text — no trace data, no markdown headers, no thinking, no explanation. Never echo back the input traces or action sequences.",
+        },
         { role: "user", content: synthesisPrompt },
       ],
       temperature: cfg.temperature,
@@ -214,16 +262,24 @@ export async function synthesizeFeedbackWithAI(
       stream: false,
     });
 
-    const content = response.choices[0]?.message?.content?.trim();
+    const rawContent = response.choices[0]?.message?.content?.trim();
 
-    if (!content || content.length < 20) {
+    if (!rawContent || rawContent.length < 20) {
       log.warn("AI synthesis returned empty/short response, falling back to static");
       const fallback = synthesizeFeedback(analysis, report);
       fallback.synthesisPrompt = synthesisPrompt;
       return fallback;
     }
 
-    const text = content;
+    // Validate and sanitize the response
+    const text = sanitizeFeedback(rawContent);
+
+    if (!text) {
+      log.warn("AI synthesis response failed validation (echoed traces or garbage), falling back to static");
+      const fallback = synthesizeFeedback(analysis, report);
+      fallback.synthesisPrompt = synthesisPrompt;
+      return fallback;
+    }
 
     log.info(`AI synthesis succeeded: ${text.length} chars`);
 

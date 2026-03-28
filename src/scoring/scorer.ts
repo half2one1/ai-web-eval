@@ -35,9 +35,11 @@ export function computeScore(
           : 0;
   } else {
     let score = assertionsPassed / assertionsTotal;
-    // Bonus for URL and content if also checked
+    // Adjust for URL and content checks: bonus if passed, penalty if explicitly failed
     if (verification.urlMatch === true) score = Math.min(1, score + 0.1);
+    else if (verification.urlMatch === false) score = Math.max(0, score - 0.2);
     if (verification.contentMatch === true) score = Math.min(1, score + 0.1);
+    else if (verification.contentMatch === false) score = Math.max(0, score - 0.2);
     completionScore = score;
   }
 
@@ -63,10 +65,10 @@ export function computeScore(
   // Flexible pass criteria:
   // 1. Traditional: verification passed AND trace completed
   // 2. High score: overall >= 0.85 AND trace completed (verification may have inconclusive checks)
-  // 3. Verification passed with high score: verification passed AND overall >= 0.80 (model may not have called task_complete)
+  // 3. Verification passed with high score: verification passed AND overall >= 0.75 (model may not have called task_complete)
   const traditionalPass = verification.passed && trace.completed;
   const highScorePass = overall >= 0.85 && trace.completed;
-  const verifiedHighScore = verification.passed && overall >= 0.80;
+  const verifiedHighScore = verification.passed && overall >= 0.75;
 
   return {
     taskId,

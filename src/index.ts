@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         overrideRuns,
       });
       const analysis = analyzePatterns(report);
-      await writeReport(outputDir, 0, task.id, report, analysis);
+      await writeReport(outputDir, 0, task.id, report, analysis, task);
 
       // Print summary
       const passRate = (analysis.passRate * 100).toFixed(0);

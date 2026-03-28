@@ -11,6 +11,30 @@ const MAX_MODEL_LENGTH = 4000;
 const MAX_SITE_LENGTH = 4000;
 const MAX_TASK_LENGTH = 8000;
 
+/**
+ * Validate that a feedback patch contains actual instructions, not garbage.
+ * Rejects patches that look like echoed trace data or raw model thoughts.
+ */
+function isValidPatch(patch: PromptPatch): boolean {
+  const text = patch.text;
+  if (!text || text.length < 10) return false;
+
+  // Reject if it contains <think> tags (leaked model reasoning)
+  if (/<think>/.test(text)) return false;
+
+  // Reject if it looks like raw trace data
+  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+  const traceLineCount = lines.filter((line) =>
+    /^\s*\d+\.\s+(open|click|fill|snapshot|scroll|type|press|select|get|wait|screenshot|done)\(/.test(line) ||
+    /Did NOT call task_complete/.test(line) ||
+    /### Run \d+ \[(PASSED|FAILED)\]/.test(line),
+  ).length;
+
+  if (lines.length > 0 && traceLineCount / lines.length > 0.3) return false;
+
+  return true;
+}
+
 export function createEmptyFeedback(): AccumulatedFeedback {
   return { patches: [], totalText: "" };
 }
@@ -24,6 +48,12 @@ export function injectFeedback(
   patch: PromptPatch,
 ): AccumulatedFeedback {
   const feedback = current || createEmptyFeedback();
+
+  // Quality gate: reject patches that contain garbage (echoed traces, think tags)
+  if (!isValidPatch(patch)) {
+    return feedback;
+  }
+
   const newPatches = [...feedback.patches, patch];
 
   // Build combined text, newest patches take priority
