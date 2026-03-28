@@ -3,7 +3,9 @@ import { join } from "node:path";
 import type { ObservationReport } from "../types/score.js";
 import type { AnalysisResult } from "../types/pattern.js";
 import type { PromptPatch } from "../types/feedback.js";
+import type { TaskDefinition } from "../types/task.js";
 import type { CycleResult } from "./eval-cycle.js";
+import { describeActionBrief } from "../utils/trace-context.js";
 import { log } from "../utils/logger.js";
 
 function ensureDir(dir: string): void {
@@ -16,6 +18,7 @@ export async function writeReport(
   taskId: string,
   observation: ObservationReport,
   analysis: AnalysisResult,
+  task?: TaskDefinition,
 ): Promise<void> {
   const dir = join(outputDir, `cycle-${cycle}`);
   ensureDir(dir);
@@ -29,7 +32,7 @@ export async function writeReport(
 
   // Write Markdown summary
   const mdPath = join(dir, `${taskId}.md`);
-  const md = generateMarkdown(cycle, taskId, observation, analysis);
+  const md = generateMarkdown(cycle, taskId, observation, analysis, task);
   writeFileSync(mdPath, md);
 
   log.info(`Report written: ${dir}/${taskId}.*`);
@@ -96,11 +99,21 @@ function generateMarkdown(
   taskId: string,
   observation: ObservationReport,
   analysis: AnalysisResult,
+  task?: TaskDefinition,
 ): string {
   const lines: string[] = [];
 
   lines.push(`# Cycle ${cycle} — ${taskId}`);
   lines.push(`\nGenerated: ${new Date().toISOString()}\n`);
+
+  // Task info (goal, URL) for human context
+  if (task) {
+    lines.push(`## Task`);
+    lines.push(`- **Name**: ${task.name}`);
+    lines.push(`- **URL**: ${task.url}`);
+    lines.push(`- **Goal**: ${task.goal.trim()}`);
+    lines.push("");
+  }
 
   // Summary
   lines.push(`## Summary`);
@@ -119,6 +132,48 @@ function generateMarkdown(
     lines.push(
       `| ${run.runIndex + 1} | ${s.passed ? "YES" : "NO"} | ${s.overall.toFixed(2)} | ${s.completion.score.toFixed(2)} | ${s.efficiency.score.toFixed(2)} | ${s.accuracy.score.toFixed(2)} | ${s.efficiency.actualSteps} |`,
     );
+  }
+
+  // Run details: what each run found and how
+  lines.push(`\n## Run Details`);
+  for (const run of observation.runs) {
+    const status = run.score.passed ? "PASS" : "FAIL";
+    lines.push(`\n### Run ${run.runIndex + 1} [${status}] — score: ${run.score.overall.toFixed(2)}`);
+
+    // Completion summary (what the agent reported)
+    if (run.trace.completed && run.trace.completionSummary) {
+      lines.push(`\n**Agent answer**: ${run.trace.completionSummary}`);
+    } else if (!run.trace.completed) {
+      // Extract last meaningful thought as the agent's best understanding
+      const meaningfulThoughts = run.trace.thoughts
+        .filter(Boolean)
+        .map((t) => t.replace(/<\/?think>\s*/g, "").trim())
+        .filter((t) => t.length > 20);
+      if (meaningfulThoughts.length > 0) {
+        const lastThought = meaningfulThoughts[meaningfulThoughts.length - 1];
+        // Truncate to a reasonable length
+        const truncated = lastThought.length > 500
+          ? lastThought.slice(0, 500) + "..."
+          : lastThought;
+        lines.push(`\n**Did not call task_complete.** Last reasoning:`);
+        lines.push(`> ${truncated.replace(/\n/g, "\n> ")}`);
+      } else {
+        lines.push(`\n**Did not call task_complete.** No reasoning captured.`);
+      }
+    }
+
+    // Action trace: concise step-by-step
+    const actions = run.trace.actions;
+    if (actions.length > 0) {
+      lines.push(`\n**Actions** (${actions.length} steps):`);
+      for (const a of actions) {
+        const brief = describeActionBrief(a, actions);
+        const status = a.result.success
+          ? "ok"
+          : `FAIL: ${a.result.error?.split("\n")[0] || "unknown"}`;
+        lines.push(`${a.index + 1}. ${brief} → ${status}`);
+      }
+    }
   }
 
   // Failure patterns

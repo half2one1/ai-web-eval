@@ -144,7 +144,7 @@ export async function runEvalCycle(
       });
 
       // Write per-task report
-      await writeReport(config.outputDir, cycle, task.id, observation, analysis);
+      await writeReport(config.outputDir, cycle, task.id, observation, analysis, task);
     }
 
     // CROSS-TASK ANALYSIS: Update site profiles and model profile
