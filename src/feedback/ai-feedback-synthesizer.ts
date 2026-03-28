@@ -5,6 +5,7 @@ import type { ObservationReport } from "../types/score.js";
 import type { TaskDefinition } from "../types/task.js";
 import { synthesizeFeedback } from "./feedback-synthesizer.js";
 import { log } from "../utils/logger.js";
+import { resolveRef, describeStepContext, describeActionBrief } from "../utils/trace-context.js";
 
 export interface AISynthesisConfig {
   apiUrl: string;
@@ -18,7 +19,7 @@ const DEFAULT_CONFIG: AISynthesisConfig = {
   apiUrl: "http://localhost:1234/v1",
   model: "default",
   temperature: 0.3,
-  maxTokens: 1024,
+  maxTokens: 4096,
 };
 
 /**
@@ -58,6 +59,14 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
     sections.push(`## Failure Patterns`);
     for (const p of analysis.failurePatterns) {
       const examples = p.examples.slice(0, 2).map((e) => {
+        // Resolve element refs to human-readable descriptions
+        const traceActions = report.runs[e.runIndex]?.trace.actions;
+        let actionDesc: string;
+        if (traceActions && e.actionIndex < traceActions.length) {
+          actionDesc = describeActionBrief(traceActions[e.actionIndex], traceActions);
+          const ctx = describeStepContext(e.actionIndex, traceActions);
+          return `  - Run ${e.runIndex + 1}, ${ctx}: ${actionDesc}${e.error ? ` -> ERROR: ${e.error}` : ""}`;
+        }
         const argsStr = Object.entries(e.args)
           .filter(([k]) => k !== "_toolCallId")
           .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
@@ -65,7 +74,7 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
         return `  - Run ${e.runIndex + 1}, step ${e.actionIndex}: ${e.action}(${argsStr})${e.error ? ` -> ERROR: ${e.error}` : ""}`;
       });
       sections.push(
-        `**${p.description}** (frequency: ${(p.frequency * 100).toFixed(0)}%, at steps: ${p.atSteps.join(", ")})\n${examples.join("\n")}`,
+        `**${p.description}** (frequency: ${(p.frequency * 100).toFixed(0)}%)\n${examples.join("\n")}`,
       );
     }
   }
@@ -85,8 +94,9 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
   if (analysis.criticalSteps.length > 0) {
     sections.push(`## Critical Divergence Points`);
     for (const s of analysis.criticalSteps) {
+      // s.description already contains contextual language from pattern-analyzer
       sections.push(
-        `Step ${s.stepIndex}: Success uses '${s.successAction}', failure uses '${s.failureAction}' — ${s.description}`,
+        `${s.description} — success uses '${s.successAction}', failure uses '${s.failureAction}'`,
       );
     }
   }
@@ -99,24 +109,22 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
     const status = run.score.passed ? "PASSED" : "FAILED";
     const score = run.score.overall.toFixed(2);
 
-    // Condense trace: show action sequence with key details
-    const actionSummary = run.trace.actions.map((a) => {
-      const args = Object.entries(a.args)
-        .filter(([k]) => k !== "_toolCallId")
-        .map(([k, v]) => `${k}=${typeof v === "string" && v.length > 50 ? JSON.stringify(v.slice(0, 50) + "...") : JSON.stringify(v)}`)
-        .join(", ");
-      const status = a.result.success ? "ok" : `FAIL: ${a.result.error?.slice(0, 60) || "unknown"}`;
-      return `  ${a.index + 1}. ${a.action}(${args}) -> ${status}`;
+    // Condense trace: show action sequence with resolved element descriptions
+    const traceActions = run.trace.actions;
+    const actionSummary = traceActions.map((a) => {
+      const brief = describeActionBrief(a, traceActions);
+      const status = a.result.success ? "ok" : `FAIL: ${a.result.error || "unknown"}`;
+      return `  ${a.index + 1}. ${brief} -> ${status}`;
     });
 
     // Include thoughts if present
     const thoughts = run.trace.thoughts.filter(Boolean).slice(0, 3);
     const thoughtStr = thoughts.length > 0
-      ? `\n  Thoughts: ${thoughts.map((t) => `"${t.slice(0, 80)}"`).join("; ")}`
+      ? `\n  Thoughts: ${thoughts.map((t) => `"${t}"`).join("; ")}`
       : "";
 
     const completionStr = run.trace.completed
-      ? `\n  Completion: "${run.trace.completionSummary?.slice(0, 100) || "no summary"}"`
+      ? `\n  Completion: "${run.trace.completionSummary || "no summary"}"`
       : "\n  Did NOT call task_complete";
 
     // Score breakdown
@@ -142,7 +150,7 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
       }
     }
     if (existingFeedback.task.totalText) {
-      existingParts.push(`Previous task feedback: ${existingFeedback.task.totalText.slice(0, 300)}`);
+      existingParts.push(`Previous task feedback: ${existingFeedback.task.totalText}`);
     }
     if (existingParts.length > 0) {
       sections.push(`## Existing Feedback (from prior cycles)\n${existingParts.join("\n")}`);
@@ -153,10 +161,10 @@ Write feedback as direct instructions to the agent. Be concrete — reference sp
   sections.push(`## Instructions
 Based on the analysis and traces above, write feedback for the agent. Follow these rules:
 
-1. **Be specific**: Reference concrete actions, element refs, page states, and error messages from the traces
+1. **Be specific**: Reference concrete actions, element descriptions, page states, and error messages from the traces. Use element names (e.g. 'the "Search" button') not abstract refs.
 2. **Be actionable**: Each piece of feedback should tell the agent exactly what to DO differently
 3. **Prioritize**: Address the most impactful issues first (highest frequency failures, critical divergence points)
-4. **Be concise**: Keep total feedback under 800 characters. The agent has limited prompt space
+4. **Be thorough**: Provide complete, detailed feedback. Cover all identified issues with full explanations and instructions
 5. **Don't repeat**: If existing feedback already covers an issue, skip it or refine it — don't duplicate
 6. **Use imperative tone**: Write as direct instructions ("Take a snapshot before...", "Do NOT repeat...")
 
@@ -215,8 +223,7 @@ export async function synthesizeFeedbackWithAI(
       return fallback;
     }
 
-    // Trim to budget (task-level max is 800 chars)
-    const text = content.length > 800 ? content.slice(0, 797) + "..." : content;
+    const text = content;
 
     log.info(`AI synthesis succeeded: ${text.length} chars`);
 

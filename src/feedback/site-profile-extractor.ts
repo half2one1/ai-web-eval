@@ -3,6 +3,7 @@ import type { ObservationReport } from "../types/score.js";
 import type { TracedAction, ActionTrace } from "../types/trace.js";
 import type { AnalysisResult } from "../types/pattern.js";
 import { log } from "../utils/logger.js";
+import { resolveRef } from "../utils/trace-context.js";
 
 /**
  * Extract domain from a URL.
@@ -180,7 +181,7 @@ function abstractError(action: TracedAction): string | null {
 
   // Generic but still useful if frequent
   if (error.length > 10) {
-    return `'${actionName}' commonly fails on this site: ${error.slice(0, 80)}`;
+    return `'${actionName}' commonly fails on this site: ${error}`;
   }
 
   return null;
@@ -226,7 +227,7 @@ function extractStrategies(profile: SiteProfile, passedTraces: ActionTrace[]): v
 
   if (totalInteractions > 0 && snapshotBeforeInteract / totalInteractions >= 0.7) {
     addIfNovel(profile.strategies,
-      `On this site, always take a snapshot immediately before fill/click/select — elements and their @refs change frequently.`,
+      `On this site, always take a snapshot immediately before fill/click/select — elements change frequently after page updates.`,
     );
   }
 
@@ -331,46 +332,42 @@ function abstractAction(action: TracedAction): string | null {
 
 /**
  * Infer what kind of element an action targets based on context.
- * Uses the snapshot text, action args, and surrounding context.
+ * Uses snapshot parsing to resolve element refs to readable descriptions,
+ * then falls back to keyword-based inference.
  */
 function inferElementContext(action: TracedAction, snapshot: string): string | null {
   const ref = String(action.args.ref || "");
-  const value = String(action.args.value || "");
 
-  // Search-related keywords in various languages
-  const searchKeywords = ["search", "검색", "query", "keyword", "찾기", "input"];
-
-  // Check if the snapshot near this ref mentions search-related text
+  // If we have a ref and snapshot, try to resolve it to an accessible name
   if (ref && snapshot) {
-    // Find lines in snapshot containing this ref
+    // Build a minimal TracedAction array for resolveRef
+    const fakeActions: TracedAction[] = [
+      { ...action, index: 1, action: "snapshot", result: { success: true, output: snapshot, error: null } } as TracedAction,
+      { ...action, index: 1 } as TracedAction,
+    ];
+    const resolved = resolveRef(ref, fakeActions, 1);
+    if (resolved !== ref) {
+      // Strip "the " prefix for use in abstract sequences
+      return resolved.replace(/^the /, "");
+    }
+
+    // Fallback: keyword search in snapshot lines containing this ref
     const lines = snapshot.split("\n");
+    const searchKeywords = ["search", "검색", "query", "keyword", "찾기", "input"];
     for (const line of lines) {
       if (line.includes(ref) || line.includes(`@${ref}`)) {
         const lowerLine = line.toLowerCase();
-        if (searchKeywords.some((k) => lowerLine.includes(k))) {
-          return "search input";
-        }
-        if (lowerLine.includes("submit") || lowerLine.includes("검색") || lowerLine.includes("search")) {
-          return "search/submit button";
-        }
-        if (lowerLine.includes("login") || lowerLine.includes("로그인")) {
-          return "login field";
-        }
-        if (lowerLine.includes("password") || lowerLine.includes("비밀번호")) {
-          return "password field";
-        }
+        if (searchKeywords.some((k) => lowerLine.includes(k))) return "search input";
+        if (lowerLine.includes("submit")) return "submit button";
+        if (lowerLine.includes("login") || lowerLine.includes("로그인")) return "login field";
+        if (lowerLine.includes("password") || lowerLine.includes("비밀번호")) return "password field";
       }
     }
   }
 
   // Infer from action type + value
-  if (action.action === "fill" && value.length > 0) {
+  if (action.action === "fill" && String(action.args.value || "").length > 0) {
     return "text input";
-  }
-
-  if (action.action === "click") {
-    // Check if followed by navigation (next action is open or snapshot shows new page)
-    return null; // Can't determine without more context
   }
 
   return null;

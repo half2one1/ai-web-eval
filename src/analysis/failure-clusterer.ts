@@ -1,5 +1,6 @@
 import type { ActionTrace } from "../types/trace.js";
 import type { FailurePattern } from "../types/pattern.js";
+import { describeStepContext, resolveRef } from "../utils/trace-context.js";
 
 /**
  * Cluster similar failures across multiple traces of the same task.
@@ -67,7 +68,7 @@ function clusterActionFailures(traces: ActionTrace[]): FailurePattern[] {
     if (frequency < 0.3 && totalTraces > 2) continue;
 
     patterns.push({
-      description: describeCluster(cluster),
+      description: describeCluster(cluster, traces),
       frequency,
       atSteps: [...new Set(cluster.steps)].sort((a, b) => a - b),
       examples: cluster.examples,
@@ -190,11 +191,11 @@ function buildClusterKey(action: string, type: string, step: number): string {
   return `${type}:${action}:${phase}`;
 }
 
-function describeCluster(cluster: FailureCluster): string {
+function describeCluster(cluster: FailureCluster, traces: ActionTrace[]): string {
   const { actionType, annotationType, examples } = cluster;
-  const avgStep = Math.round(
-    cluster.steps.reduce((a, b) => a + b, 0) / cluster.steps.length,
-  );
+
+  // Build a contextual description from the most representative example
+  const contextDesc = buildContextDesc(examples, traces);
 
   if (annotationType === "mistake") {
     const errors = examples
@@ -202,16 +203,48 @@ function describeCluster(cluster: FailureCluster): string {
       .filter(Boolean)
       .slice(0, 3);
     const errorSummary = errors.length > 0 ? `: ${errors[0]}` : "";
-    return `Model frequently fails at '${actionType}' around step ${avgStep}${errorSummary}`;
+    return `Model frequently fails at '${actionType}' ${contextDesc}${errorSummary}`;
   }
 
   if (annotationType === "redundant") {
-    return `Model redundantly repeats '${actionType}' around step ${avgStep} without state change`;
+    return `Model redundantly repeats '${actionType}' ${contextDesc} without state change`;
   }
 
   if (annotationType === "suboptimal") {
-    return `Model uses suboptimal '${actionType}' action around step ${avgStep}`;
+    return `Model uses suboptimal '${actionType}' action ${contextDesc}`;
   }
 
-  return `Recurring ${annotationType} '${actionType}' at step ${avgStep}`;
+  return `Recurring ${annotationType} '${actionType}' ${contextDesc}`;
+}
+
+/**
+ * Build a contextual description for a cluster by resolving the first
+ * example's step context from the original trace.
+ */
+function buildContextDesc(
+  examples: FailurePattern["examples"],
+  traces: ActionTrace[],
+): string {
+  if (examples.length === 0) return "";
+
+  const ex = examples[0];
+  const trace = traces[ex.runIndex];
+  if (!trace) return "";
+
+  const actions = trace.actions;
+  const actionIdx = ex.actionIndex;
+  if (actionIdx < 0 || actionIdx >= actions.length) return "";
+
+  // Resolve element ref if present
+  const ref = ex.args.ref ? String(ex.args.ref) : null;
+  const target = ref ? resolveRef(ref, actions, actionIdx) : null;
+
+  // Build context from preceding action
+  const stepCtx = describeStepContext(actionIdx, actions);
+
+  // If we resolved a target, mention it; otherwise just use step context
+  if (target && target !== ref) {
+    return `on ${target} (${stepCtx})`;
+  }
+  return `(${stepCtx})`;
 }

@@ -205,7 +205,7 @@ export async function writeSummaryReport(
       if (taskResult) {
         const pr = (taskResult.analysis.passRate * 100).toFixed(0);
         const fb = taskResult.feedback.totalText
-          ? `\n  Feedback: ${taskResult.feedback.totalText.slice(0, 200)}...`
+          ? `\n  Feedback:\n${taskResult.feedback.totalText}`
           : "";
         lines.push(`- Cycle ${cycle.cycle}: pass rate ${pr}%${fb}`);
       }
